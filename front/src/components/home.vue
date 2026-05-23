@@ -1,9 +1,6 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-// 🛠️ FIXED: Changed '../' to './' because both files are in the components folder
 import { fetchActiveProducts, addProductToCart } from './productService.js'
-
-
 
 defineOptions({ name: 'Home' })
 
@@ -116,8 +113,8 @@ function badgeLabel(p) {
           <span class="product-emoji">{{ product.emoji }}</span>
           <!-- Mountain silhouette SVG (matches image aesthetic) -->
           <svg class="mountain-svg" viewBox="0 0 320 80" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
-            <polygon points="0,80 60,30 100,50 160,10 220,45 270,25 320,50 320,80" fill="rgba(180,150,110,0.25)"/>
-            <polygon points="0,80 80,45 130,65 200,30 260,55 320,35 320,80" fill="rgba(160,130,90,0.18)"/>
+            <polygon points="0,80 60,30 100,50 160,10 220,45 270,25 320,50 320,80" fill="rgba(140,110,115,0.30)"/>
+            <polygon points="0,80 80,45 130,65 200,30 260,55 320,35 320,80" fill="rgba(120,90,100,0.22)"/>
           </svg>
         </div>
 
@@ -171,23 +168,23 @@ function badgeLabel(p) {
 </template>
 
 <style scoped>
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Sans:wght@300;400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400;1,600&family=DM+Sans:wght@300;400;500;600&display=swap');
 
 .page {
-  --cream:      #F5EDE0;
-  --warm:       #E8D5B5;
-  --warm-lt:    #F0E4CC;
-  --gold:       #B8832A;
-  --gold-lt:    #D4A855;
-  --brown:      #5C3D1E;
-  --brown-dk:   #3A2410;
-  --brown-md:   #7A5230;
-  --muted:      #8A7055;
-  --card-bg:    #FAF3E8;
-  --thumb-bg:   #EDD9B5;
-  --white:      #FFFDF7;
+  --cream:      #F2F0EA;
+  --warm:       #D6D8C8;
+  --warm-lt:    #E8EAE0;
+  --gold:       #7A8C5A;
+  --gold-lt:    #9AAD72;
+  --brown:      #3D4A2E;
+  --brown-dk:   #147b27;
+  --brown-md:   #4F6035;
+  --muted:      #7A826A;
+  --card-bg:    #F7F6F0;
+  --thumb-bg:   #E2DFD4;
+  --white:      #FAFAF5;
   --radius:     16px;
-  --shadow:     0 2px 16px rgba(92,61,30,0.10);
+  --shadow:     0 2px 16px rgba(44,53,32,0.10);
 
   padding-top: 96px;
   padding-left: 20px;
@@ -200,7 +197,7 @@ function badgeLabel(p) {
 
 /* HERO ──────────────────────────────── */
 .hero-strip {
-  background: linear-gradient(118deg, #4A2E10 0%, #6B3D18 55%, #8A5025 100%);
+  background:  #147b27;
   border-radius: var(--radius);
   padding: 32px 28px;
   margin-bottom: 36px;
@@ -228,12 +225,12 @@ function badgeLabel(p) {
   font-family: 'Cormorant Garamond', serif;
   font-size: 28px;
   font-weight: 700;
-  color: var(--cream);
+  color: #f2dcb2;
   line-height: 1.25;
 }
 .hero-sub {
   font-size: 12px;
-  color: rgba(245,237,224,0.55);
+  color: rgba(248, 247, 245, 0.925);
   margin-top: 10px;
   letter-spacing: 0.3px;
 }
@@ -315,7 +312,7 @@ function badgeLabel(p) {
 }
 .badge-default  { background: rgba(58,36,16,0.85); color: var(--cream); }
 .badge-discount { background: var(--gold); color: #fff; }
-.badge-sold     { background: #2C3520; color: #F5EDE0; }
+.badge-sold     { background: #3A2410; color: #F5EDE0; }
 
 /* BODY ──────────────────────────────── */
 .product-body     { padding: 14px 14px 12px; }
@@ -363,7 +360,7 @@ function badgeLabel(p) {
 
 /* STORY SECTION ─────────────────────── */
 .story-section {
-  background: var(--brown-dk);
+  background: #3e9e41;
   border-radius: var(--radius);
   padding: 36px 28px;
   margin-top: 40px;
@@ -380,7 +377,7 @@ function badgeLabel(p) {
   line-height: 1.15; margin-bottom: 14px;
   color: var(--cream);
 }
-.story-accent { color: var(--gold-lt); font-style: italic; }
+.story-accent { color: #147b27; font-style: italic; }
 .story-body   { font-size: 14px; color: rgba(245,237,224,0.65); line-height: 1.7; max-width: 480px; }
 
 /* MOBILE BOTTOM NAV ─────────────────── */

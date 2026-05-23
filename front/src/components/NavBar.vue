@@ -88,12 +88,12 @@ function closeMobileMenu()  { mobileMenuOpen.value = false }
 
 :root {
   --cream:    #F5EDE0;
-  --warm:     #E8D5B5;
-  --gold:     #B8832A;
-  --brown:    #5C3D1E;
-  --brown-dk: #3A2410;
-  --muted:    #8A7055;
-  --white:    #FFFDF7;
+  --warm:     #D6D8C8;
+  --gold:     #7A8C5A;
+  --brown:    #147b27;
+  --brown-dk: #147b27;
+  --muted:    #7A826A;
+  --white:    #FAFAF5;
 }
 
 .topbar {
@@ -106,61 +106,61 @@ function closeMobileMenu()  { mobileMenuOpen.value = false }
 .tb-left   { display: flex; align-items: center; padding-left: 16px; }
 .logo-link { display: flex; align-items: center; gap: 10px; text-decoration: none; }
 .logo-img  { width: 52px; height: 52px; object-fit: contain; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.12)); }
-.logo-text { font-family: 'Cormorant Garamond', serif; font-size: 21px; font-weight: 700; color: #3A2410; white-space: nowrap; }
+.logo-text { font-family: 'Cormorant Garamond', serif; font-size: 21px; font-weight: 700; color: #2C3520; white-space: nowrap; }
 
 .desktop-nav {
   display: flex; align-items: center; gap: 2px;
   background: rgba(255,253,247,0.92); backdrop-filter: blur(16px);
-  border: 1px solid rgba(184,131,42,0.20);
-  box-shadow: 0 8px 28px rgba(58,36,16,0.10);
+  border: 1px solid rgba(122,140,90,0.20);
+  box-shadow: 0 8px 28px rgba(44,53,32,0.10);
   border-radius: 999px; padding: 6px 12px;
 }
 .desktop-nav a {
-  text-decoration: none; color: #8A7055; font-size: 13px; font-weight: 500;
+  text-decoration: none; color: #7A826A; font-size: 13px; font-weight: 500;
   padding: 6px 14px; border-radius: 999px;
   transition: background .2s, color .2s; white-space: nowrap;
 }
-.desktop-nav a:hover              { background: rgba(58,36,16,0.07); color: #5C3D1E; }
-.desktop-nav a.router-link-active { background: #3A2410; color: #F5EDE0; }
+.desktop-nav a:hover              { background: #147b27; color: #3D4A2E; }
+.desktop-nav a.router-link-active { background: #147b27; color: #F5EDE0; }
 @media (max-width: 700px) { .desktop-nav { display: none; } }
 
 .tb-right {
   display: flex; align-items: center; gap: 8px;
   background: rgba(255,253,247,0.92); backdrop-filter: blur(16px);
-  border: 1px solid rgba(184,131,42,0.20);
-  box-shadow: 0 8px 28px rgba(58,36,16,0.10);
+  border: 1px solid rgba(122,140,90,0.20);
+  box-shadow: 0 8px 28px rgba(44,53,32,0.10);
   border-radius: 999px; padding: 6px 12px;
 }
 .btn-outline {
-  border: 1.5px solid #B8832A; background: transparent; color: #B8832A;
+  border: 1.5px solid #7A8C5A; background: transparent; color: #7A8C5A;
   padding: 6px 16px; border-radius: 999px; font-size: 13px; font-weight: 500;
   cursor: pointer; text-decoration: none; transition: all .2s; white-space: nowrap;
 }
-.btn-outline:hover { background: #B8832A; color: #FFFDF7; }
+.btn-outline:hover { background: #7A8C5A; color: #FAFAF5; }
 .btn-fill {
-  background: #3A2410; color: #F5EDE0; padding: 6px 16px; border-radius: 999px;
+  background: #2C3520; color: #F5EDE0; padding: 6px 16px; border-radius: 999px;
   font-size: 13px; font-weight: 500; text-decoration: none; border: none;
   cursor: pointer; transition: background .2s; white-space: nowrap;
 }
-.btn-fill:hover { background: #5C3D1E; }
+.btn-fill:hover { background: #3D4A2E; }
 
-.user-chip       { display: flex; align-items: center; gap: 8px; text-decoration: none; color: #3A2410; font-size: 13px; font-weight: 500; }
-.avatar          { width: 32px; height: 32px; border-radius: 50%; background: #E8D5B5; border: 2px solid #B8832A; overflow: hidden; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.user-chip       { display: flex; align-items: center; gap: 8px; text-decoration: none; color: #2C3520; font-size: 13px; font-weight: 500; }
+.avatar          { width: 32px; height: 32px; border-radius: 50%; background: #D6D8C8; border: 2px solid #7A8C5A; overflow: hidden; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .avatar-img      { width: 100%; height: 100%; object-fit: cover; }
-.avatar-initials { font-size: 13px; font-weight: 700; color: #5C3D1E; }
+.avatar-initials { font-size: 13px; font-weight: 700; color: #3D4A2E; }
 .user-name       { white-space: nowrap; max-width: 100px; overflow: hidden; text-overflow: ellipsis; }
 
 .hamburger {
   width: 32px; height: 36px; border-radius: 8px;
-  border: 1.5px solid #E8D5B5; background: transparent; cursor: pointer;
+  border: 1.5px solid #D6D8C8; background: transparent; cursor: pointer;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
   padding: 6px; transition: background .2s;
 }
-.hamburger span { display: block; width: 100%; height: 2px; background: #8A7055; border-radius: 2px; transition: transform .25s, opacity .25s; transform-origin: center; }
+.hamburger span { display: block; width: 100%; height: 2px; background: #7A826A; border-radius: 2px; transition: transform .25s, opacity .25s; transform-origin: center; }
 .hamburger.open span:nth-child(1) { transform: translateY(6px) rotate(45deg); }
 .hamburger.open span:nth-child(2) { opacity: 0; }
 .hamburger.open span:nth-child(3) { transform: translateY(-6px) rotate(-45deg); }
-.hamburger:hover { background: #E8D5B5; }
+.hamburger:hover { background: #D6D8C8; }
 
 .desktop-only { display: inline; }
 .mobile-only  { display: none;   }
@@ -176,18 +176,18 @@ function closeMobileMenu()  { mobileMenuOpen.value = false }
 .mobile-menu {
   position: fixed; top: 68px; right: 16px; width: 220px;
   background: rgba(255,253,247,0.97); backdrop-filter: blur(16px);
-  border: 1px solid #E8D5B5; border-radius: 16px;
-  box-shadow: 0 16px 40px rgba(58,36,16,0.16);
+  border: 1px solid #D6D8C8; border-radius: 16px;
+  box-shadow: 0 16px 40px rgba(44,53,32,0.16);
   z-index: 300; overflow: hidden; padding: 8px 0;
 }
 .mobile-menu a {
   display: flex; align-items: center; gap: 10px;
   padding: 12px 18px; text-decoration: none;
-  color: #3A2410; font-size: 14px; font-weight: 500; transition: background .15s;
+  color: #2C3520; font-size: 14px; font-weight: 500; transition: background .15s;
 }
-.mobile-menu a:hover              { background: #E8D5B5; }
-.mobile-menu a.router-link-active { color: #5C3D1E; font-weight: 700; }
-.menu-divider { height: 1px; background: #E8D5B5; margin: 6px 0; }
+.mobile-menu a:hover              { background: #D6D8C8; }
+.mobile-menu a.router-link-active { color: #3D4A2E; font-weight: 700; }
+.menu-divider { height: 1px; background: #D6D8C8; margin: 6px 0; }
 .menu-overlay { position: fixed; inset: 0; z-index: 290; background: rgba(0,0,0,0.15); }
 
 .menu-slide-enter-active, .menu-slide-leave-active { transition: opacity .2s, transform .2s; }

@@ -51,8 +51,8 @@ defineOptions({ name: 'Footer' })
 @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@700&family=DM+Sans:wght@400;500&display=swap');
 
 .footer {
-  background: #3A2410;
-  color: #E8D5B5;
+  background: #2C3520;
+  color: #D6D8C8;
   font-family: 'DM Sans', sans-serif;
   margin-top: 60px;
   padding-bottom: 20px;
@@ -69,24 +69,24 @@ defineOptions({ name: 'Footer' })
 
 .footer-brand { display: flex; flex-direction: column; gap: 8px; }
 .foot-logo    { width: 38px; height: 38px; object-fit: contain; filter: brightness(1.2); }
-.foot-name    { font-family: 'Cormorant Garamond', serif; font-size: 19px; font-weight: 700; color: #D4A855; }
-.foot-tagline { font-size: 13px; color: rgba(232,213,181,0.50); line-height: 1.6; margin: 0; }
+.foot-name    { font-family: 'Cormorant Garamond', serif; font-size: 19px; font-weight: 700; color: #9AAD72; }
+.foot-tagline { font-size: 13px; color: rgba(214,216,200,0.50); line-height: 1.6; margin: 0; }
 
 .footer-col  { display: flex; flex-direction: column; gap: 10px; }
-.col-title   { font-size: 10px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: #B8832A; margin-bottom: 4px; }
+.col-title   { font-size: 10px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: #7A8C5A; margin-bottom: 4px; }
 .footer-col a {
-  text-decoration: none; color: rgba(232,213,181,0.60);
+  text-decoration: none; color: rgba(214,216,200,0.60);
   font-size: 13px; transition: color .2s;
 }
-.footer-col a:hover { color: #D4A855; }
+.footer-col a:hover { color: #9AAD72; }
 
 .footer-bottom {
   max-width: 1100px; margin: 0 auto;
   padding: 16px 28px 0;
-  border-top: 1px solid rgba(232,213,181,0.10);
+  border-top: 1px solid rgba(214,216,200,0.10);
   display: flex; align-items: center; justify-content: space-between;
-  font-size: 12px; color: rgba(232,213,181,0.35);
+  font-size: 12px; color: rgba(214,216,200,0.35);
   flex-wrap: wrap; gap: 8px;
 }
-.made-with { color: rgba(232,213,181,0.38); }
+.made-with { color: rgba(214,216,200,0.38); }
 </style>
