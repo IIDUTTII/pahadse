@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { fetchActiveProducts, addProductToCart } from './productService.js'
+import { fetchActiveProducts, addProductToCart } from './db.js'
 
 defineOptions({ name: 'Home' })
 
@@ -117,7 +117,7 @@ function badgeLabel(p) {
             <polygon points="0,80 80,45 130,65 200,30 260,55 320,35 320,80" fill="rgba(120,90,100,0.22)"/>
           </svg>
         </div>
-
+        
         <!-- Info -->
         <div class="product-body">
           <div class="product-category">{{ product.category || 'HIMALAYAN HARVEST' }}</div>
@@ -168,8 +168,7 @@ function badgeLabel(p) {
 </template>
 
 <style scoped>
-@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400;1,600&family=DM+Sans:wght@300;400;500;600&display=swap');
-
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Sans:wght@300;400;500&display=swap');
 .page {
   --cream:      #F2F0EA;
   --warm:       #D6D8C8;
@@ -178,10 +177,10 @@ function badgeLabel(p) {
   --gold-lt:    #9AAD72;
   --brown:      #3D4A2E;
   --brown-dk:   #147b27;
-  --brown-md:   #4F6035;
+  --brown-md:   #2a3f0a;
   --muted:      #7A826A;
-  --card-bg:    #F7F6F0;
-  --thumb-bg:   #E2DFD4;
+  --card-bg:     #ffffff;
+  --thumb-bg:   #e9e8e2;
   --white:      #FAFAF5;
   --radius:     16px;
   --shadow:     0 2px 16px rgba(44,53,32,0.10);
@@ -197,7 +196,7 @@ function badgeLabel(p) {
 
 /* HERO ──────────────────────────────── */
 .hero-strip {
-  background:  #147b27;
+  background:  #215829;
   border-radius: var(--radius);
   padding: 32px 28px;
   margin-bottom: 36px;
@@ -217,12 +216,12 @@ function badgeLabel(p) {
 .hero-eyebrow {
   font-size: 11px;
   letter-spacing: 2px;
-  color: rgba(245,237,224,0.55);
+  color: rgb(239, 237, 233);
   margin-bottom: 10px;
   font-weight: 500;
 }
 .hero-title {
-  font-family: 'Cormorant Garamond', serif;
+  font-family: 'Playfair Display', serif;
   font-size: 28px;
   font-weight: 700;
   color: #f2dcb2;

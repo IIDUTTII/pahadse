@@ -81,6 +81,15 @@ function closeMobileMenu()  { mobileMenuOpen.value = false }
     </div>
   </transition>
   <div v-if="mobileMenuOpen" class="menu-overlay" @click="closeMobileMenu"></div>
+
+  <nav class="mobile-bottom-nav">
+      <router-link to="/"         class="mob-item"><span>🏠</span><span>Home</span></router-link>
+      <router-link to="/policies" class="mob-item"><span>🛍️</span><span>Shop</span></router-link>
+      <router-link to="/cart"     class="mob-item"><span>🛒</span><span>Cart</span></router-link>
+      <router-link to="/user"     class="mob-item"><span>👤</span><span>Profile</span></router-link>
+    </nav>
+
+
 </template>
 
 <style scoped>
@@ -192,4 +201,12 @@ function closeMobileMenu()  { mobileMenuOpen.value = false }
 
 .menu-slide-enter-active, .menu-slide-leave-active { transition: opacity .2s, transform .2s; }
 .menu-slide-enter-from, .menu-slide-leave-to       { opacity: 0; transform: translateY(-10px) scale(.97); }
+
+/* MOBILE BOTTOM NAV ─────────────────── */
+.mobile-bottom-nav { display: none; position: fixed; bottom: 0; left: 0; right: 0; background: rgba(255,253,247,0.96); backdrop-filter: blur(14px); border-top: 1.5px solid var(--warm); padding: 8px 0; justify-content: space-around; z-index: 200; }
+@media (max-width: 767px) { .mobile-bottom-nav { display: flex; } }
+.mob-item { display: flex; flex-direction: column; align-items: center; gap: 3px; text-decoration: none; color: var(--muted); font-size: 11px; padding: 4px 14px; border-radius: 10px; transition: color .2s; }
+.mob-item span:first-child { font-size: 20px; }
+.mob-item.router-link-active { color: var(--gold); }
+
 </style>
