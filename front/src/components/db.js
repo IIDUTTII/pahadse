@@ -351,3 +351,55 @@ export async function logoutUser() {
   _viewedThisSession.clear()
   await signOut(auth)
 }
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// product reviews — READ & WRITE
+// ─────────────────────────────────────────────────────────────────────────────
+
+
+
+/**
+ * Fetches all matching review snapshots for a specific product item
+ * @param {string} productId 
+ * @returns {Promise<Array>} List of review data blueprints
+ */
+export const fetchProductReviews = async (productId) => {
+  if (!productId) return []
+  try {
+    const q = query(collection(db, 'reviews'), where('productId', '==', productId))
+    const snap = await getDocs(q)
+    return snap.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }))
+  } catch (error) {
+    console.error("Error pulling product reviews matrix:", error)
+    return []
+  }
+}
+
+/**
+ * Submits a new customer review snapshot to Firestore
+ * @param {string} productId 
+ * @param {number} rating 
+ * @param {string} comment 
+ */
+export const addProductReview = async (productId, rating, comment) => {
+  const currentUser = auth.currentUser
+  if (!currentUser) throw new Error('NOT_LOGGED_IN')
+  
+  try {
+    await addDoc(collection(db, 'reviews'), {
+      productId,
+      userId: currentUser.uid,
+      userName: currentUser.displayName || 'Verified Buyer',
+      rating: Number(rating),
+      comment: comment.trim(),
+      createdAt: serverTimestamp()
+    })
+  } catch (error) {
+    console.error("Failed submitting user review:", error)
+    throw error
+  }
+}

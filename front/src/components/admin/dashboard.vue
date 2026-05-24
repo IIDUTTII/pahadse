@@ -14,6 +14,7 @@ import {
 
 defineOptions({ name: 'Admin' })
 const router = useRouter()
+// add  username,email column in user section
 
 // ── NAVIGATION & ROLES ──
 const activeTab = ref('products')
