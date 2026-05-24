@@ -1,59 +1,101 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { fetchActiveProducts, addProductToCart } from './db.js'
+import { useRouter } from 'vue-router'
+import {
+  fetchActiveProducts,
+  addProductToCart,
+  isProductInCart,
+  fetchCart,
+} from './db.js'
 
 defineOptions({ name: 'Home' })
+
+const router = useRouter()
 
 // ── Category filter
 const activeFilter = ref('All')
 const filters = ['All', 'Ghee & Oils', 'Juices', 'Spices & Herbs', 'Sweets']
 
 // ── Products
-const allProducts = ref([])
-const loading     = ref(true)
+const allProducts  = ref([])
+const loading      = ref(true)
+
+// ── Per-product cart state map  { productId: boolean }
+// Loaded once on mount so every card knows if it's already in cart
+// without additional Firestore reads.
+const inCartMap = ref({})
 
 onMounted(async () => {
   try {
-    allProducts.value = await fetchActiveProducts()
+    allProducts.value = await fetchActiveProducts()  // cached after first call
+
+    // Pre-load cart items ONCE and build the lookup map
+    // This is a single Firestore read — no per-product read inside the loop.
+    const cartItems = await fetchCart()
+    const map = {}
+    cartItems.forEach(item => { map[item.productId] = true })
+    inCartMap.value = map
   } catch (e) {
-    console.error('DB error:', e)
+    console.error('Home mount error:', e)
   } finally {
     loading.value = false
   }
 })
 
-// 🛒 Add to cart
-const addToCart = async (product) => {
+// ── Navigate to product detail
+function goToProduct(productId) {
+  router.push(`/product/${productId}`)
+}
+
+// ── Add to Cart or Go to Cart (if already in cart)
+const addToCart = async (event, product) => {
+  event.stopPropagation()
+
+  // Already in cart → navigate instead of re-adding
+  if (inCartMap.value[product.id]) {
+    router.push('/cart')
+    return
+  }
+
   try {
-    const finalPrice = hasDiscount(product) ? discountedPrice(product) : product.price
+    const finalPrice = hasDiscount(product)
+      ? discountedPrice(product)
+      : product.price
     await addProductToCart(product, finalPrice)
-    alert(`${product.name} saved securely to your cloud cart! 🏔️`)
+    // Update local map immediately — no extra Firestore read needed
+    inCartMap.value = { ...inCartMap.value, [product.id]: true }
   } catch (error) {
     if (error.message === 'NOT_LOGGED_IN') {
       alert('Please log in first to add items to your cart!')
     } else {
-      alert('Database error: ' + error.message)
+      alert('Error: ' + error.message)
     }
   }
 }
 
-// Local filter — no extra DB call
+// ── Local filter — zero extra DB calls
 const products = computed(() => {
   if (activeFilter.value === 'All') return allProducts.value
   return allProducts.value.filter(p => p.category === activeFilter.value)
 })
 
 // ── Helpers
-function hasDiscount(p)     { return p.discount?.isDiscounted && p.discount?.percent > 0 }
-function isOutOfStock(p)    { return p.stock === 0 }
-function discountedPrice(p) { return Math.round(p.price * (1 - p.discount.percent / 100)) }
+function hasDiscount(p)      { return p.discount?.isDiscounted && p.discount?.percent > 0 }
+function isOutOfStock(p)     { return p.stock === 0 }
+function discountedPrice(p)  { return Math.round(p.price * (1 - p.discount.percent / 100)) }
+function primaryImage(p)     { return p.imageUrls?.find(u => u?.trim()) ?? null }
+function galleryImages(p)    { return (p.imageUrls ?? []).filter(u => u?.trim()).slice(0, 4) }
+function hasImages(p)        { return galleryImages(p).length > 0 }
 
-// Badge label like in the image: ORGANIC, FARM FRESH, LIMITED, etc.
-function badgeLabel(p) {
-  if (isOutOfStock(p))    return 'SOLD OUT'
-  if (hasDiscount(p))     return `${p.discount.percent}% OFF`
-  if (p.badge)            return p.badge.toUpperCase()
-  return null
+// Per-card active gallery index — keyed by product id
+const activeImageIndex = ref({})
+function setImage(productId, index) {
+  activeImageIndex.value = { ...activeImageIndex.value, [productId]: index }
+}
+function getActiveImage(p) {
+  const idx   = activeImageIndex.value[p.id] ?? 0
+  const imgs  = galleryImages(p)
+  return imgs[idx] ?? null
 }
 </script>
 
@@ -62,8 +104,7 @@ function badgeLabel(p) {
 
     <!-- Hero Banner -->
     <div class="hero-strip">
-      <div class="hero-text">
-        <div class="hero-eyebrow">✦ FROM THE HILLS</div>
+      <div>
         <div class="hero-title">Pure Himalayan Goodness,<br>Straight to Your Door</div>
         <div class="hero-sub">No preservatives · Handmade · 100% Natural</div>
       </div>
@@ -98,30 +139,63 @@ function badgeLabel(p) {
 
     <!-- Product Grid -->
     <div v-else class="product-grid">
-      <div v-for="product in products" :key="product.id" class="product-card">
-
-        <!-- Top image area with mountain silhouette bg + badge -->
-        <div class="product-thumb" :class="{ 'thumb-sold': isOutOfStock(product) }">
-          <div v-if="badgeLabel(product)" class="corner-badge"
-               :class="{
-                 'badge-sold':     isOutOfStock(product),
-                 'badge-discount': hasDiscount(product) && !isOutOfStock(product),
-                 'badge-default':  !isOutOfStock(product) && !hasDiscount(product)
-               }">
-            {{ badgeLabel(product) }}
-          </div>
-          <span class="product-emoji">{{ product.emoji }}</span>
-          <!-- Mountain silhouette SVG (matches image aesthetic) -->
-          <svg class="mountain-svg" viewBox="0 0 320 80" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
-            <polygon points="0,80 60,30 100,50 160,10 220,45 270,25 320,50 320,80" fill="rgba(140,110,115,0.30)"/>
-            <polygon points="0,80 80,45 130,65 200,30 260,55 320,35 320,80" fill="rgba(120,90,100,0.22)"/>
-          </svg>
+      <div
+        v-for="product in products"
+        :key="product.id"
+        class="product-card"
+        @click="goToProduct(product.id)"
+        role="button"
+        :aria-label="`View ${product.name} details`"
+      >
+        <!-- Corner badge -->
+        <div v-if="isOutOfStock(product)" class="corner-badge sold-out">Sold Out</div>
+        <div v-else-if="hasDiscount(product)" class="corner-badge discount">
+          {{ product.discount.percent }}% OFF
         </div>
-        
-        <!-- Info -->
+
+        <!-- ── Thumb: real image OR emoji fallback ── -->
+        <div class="product-thumb">
+          <!-- If product has images, show the active one -->
+          <template v-if="hasImages(product)">
+            <img
+              :src="getActiveImage(product)"
+              :alt="product.name"
+              class="thumb-img"
+              loading="lazy"
+              @error="$event.target.style.display='none'; $event.target.nextElementSibling.style.display='flex'"
+            />
+            <!-- Fallback emoji shown if image fails to load -->
+            <div class="emoji-fallback" style="display:none">
+              <span>{{ product.emoji }}</span>
+            </div>
+          </template>
+          <!-- No images at all → emoji -->
+          <template v-else>
+            <span class="product-emoji">{{ product.emoji }}</span>
+          </template>
+        </div>
+
+        <!-- Gallery strip — only shown when product has >1 image -->
+        <div
+          v-if="galleryImages(product).length > 1"
+          class="gallery-strip"
+          @click.stop
+        >
+          <div
+            v-for="(url, idx) in galleryImages(product)"
+            :key="idx"
+            :class="['gallery-dot-thumb', { active: (activeImageIndex[product.id] ?? 0) === idx }]"
+            @click.stop="setImage(product.id, idx)"
+          >
+            <img :src="url" :alt="`${product.name} image ${idx+1}`" loading="lazy" />
+          </div>
+        </div>
+
+        <!-- Info body -->
         <div class="product-body">
-          <div class="product-category">{{ product.category || 'HIMALAYAN HARVEST' }}</div>
           <div class="product-name">{{ product.name }}</div>
+          <div class="product-desc">{{ product.description }}</div>
+          <div v-if="product.weight" class="weight-tag">{{ product.weight }}</div>
 
           <div class="product-footer">
             <div class="price-block">
@@ -130,30 +204,29 @@ function badgeLabel(p) {
                 ₹{{ hasDiscount(product) ? discountedPrice(product) : product.price }}
               </span>
             </div>
-            <button class="add-btn-circle" :disabled="isOutOfStock(product)"
-              :class="{ 'add-btn-disabled': isOutOfStock(product) }"
-              @click="addToCart(product)" :title="isOutOfStock(product) ? 'Out of Stock' : 'Add to Cart'">
-              <span v-if="!isOutOfStock(product)">+</span>
-              <span v-else style="font-size:10px">✕</span>
-            </button>
+            <div v-if="product.reviewCount > 0" class="rating">
+              ⭐ {{ product.ratingAverage?.toFixed(1) }}
+              <span class="review-count">({{ product.reviewCount }})</span>
+            </div>
           </div>
 
-          <div v-if="product.weight" class="weight-tag">{{ product.weight }}</div>
-
-          <div v-if="product.reviewCount > 0" class="rating">
-            ⭐ {{ product.ratingAverage?.toFixed(1) }}
-            <span class="review-count">({{ product.reviewCount }})</span>
-          </div>
+          <!-- Add to Cart  ←→  Go to Cart toggle -->
+          <button
+            class="add-btn"
+            :disabled="isOutOfStock(product)"
+            :class="{
+              'add-btn-disabled' : isOutOfStock(product),
+              'add-btn-incart'   : inCartMap[product.id] && !isOutOfStock(product),
+            }"
+            @click.stop="addToCart($event, product)"
+          >
+            <template v-if="isOutOfStock(product)">Out of Stock</template>
+            <template v-else-if="inCartMap[product.id]">🛒 Go to Cart</template>
+            <template v-else>Add to Cart</template>
+          </button>
         </div>
 
       </div>
-    </div>
-
-    <!-- Story section (matches image bottom section) -->
-    <div class="story-section">
-      <div class="story-eyebrow">✦ OUR STORY</div>
-      <div class="story-title">Rooted in the<br><span class="story-accent">Mountains</span></div>
-      <p class="story-body">We work directly with Himalayan farmers to bring pure, honest food to your table.</p>
     </div>
 
     <!-- Mobile bottom nav -->
@@ -169,217 +242,133 @@ function badgeLabel(p) {
 
 <style scoped>
 @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Sans:wght@300;400;500&display=swap');
+
 .page {
-  --cream:      #F2F0EA;
-  --warm:       #D6D8C8;
-  --warm-lt:    #E8EAE0;
-  --gold:       #7A8C5A;
-  --gold-lt:    #9AAD72;
-  --brown:      #3D4A2E;
-  --brown-dk:   #147b27;
-  --brown-md:   #2a3f0a;
-  --muted:      #7A826A;
-  --card-bg:     #ffffff;
-  --thumb-bg:   #e9e8e2;
-  --white:      #FAFAF5;
-  --radius:     16px;
-  --shadow:     0 2px 16px rgba(44,53,32,0.10);
+  --cream:    #F5EFE0;
+  --warm:     #EDE0C4;
+  --gold:     #C8963E;
+  --gold-lt:  #F0C060;
+  --brown:    #5C3D1E;
+  --brown-dk: #3A2410;
+  --muted:    #8A7560;
+  --white:    #FFFDF7;
+  --green:    #3D6B4A;
+  --radius:   14px;
+  --shadow:   0 4px 24px rgba(92,61,30,0.10);
 
-  padding-top: 96px;
-  padding-left: 20px;
-  padding-right: 20px;
-  padding-bottom: 110px;
+  padding-top: 88px;
+  padding-left: 24px;
+  padding-right: 24px;
+  padding-bottom: 100px;
   font-family: 'DM Sans', sans-serif;
-  background: var(--cream);
-  min-height: 100vh;
 }
 
-/* HERO ──────────────────────────────── */
+/* HERO */
 .hero-strip {
-  background:  #215829;
+  background: linear-gradient(120deg, var(--brown) 0%, #7A4E28 100%);
   border-radius: var(--radius);
-  padding: 32px 28px;
-  margin-bottom: 36px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-  position: relative;
-  overflow: hidden;
+  padding: 28px 32px; margin-bottom: 32px;
+  display: flex; align-items: center; justify-content: space-between; gap: 20px;
+  position: relative; overflow: hidden;
 }
-.hero-strip::before {
-  content: '';
-  position: absolute; inset: 0;
-  background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.03'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
-  pointer-events: none;
-}
-.hero-eyebrow {
-  font-size: 11px;
-  letter-spacing: 2px;
-  color: rgb(239, 237, 233);
-  margin-bottom: 10px;
-  font-weight: 500;
-}
-.hero-title {
-  font-family: 'Playfair Display', serif;
-  font-size: 28px;
-  font-weight: 700;
-  color: #f2dcb2;
-  line-height: 1.25;
-}
-.hero-sub {
-  font-size: 12px;
-  color: rgba(248, 247, 245, 0.925);
-  margin-top: 10px;
-  letter-spacing: 0.3px;
-}
-.hero-badge {
-  background: var(--gold-lt);
-  color: var(--brown-dk);
-  padding: 10px 20px;
-  border-radius: 30px;
-  font-size: 12px;
-  font-weight: 600;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
+.hero-strip::after { content: '🏔️'; position: absolute; right: 160px; top: 50%; transform: translateY(-50%); font-size: 70px; opacity: .10; pointer-events: none; }
+.hero-title { font-family: 'Playfair Display', serif; font-size: 26px; color: var(--cream); font-weight: 700; line-height: 1.3; }
+.hero-sub   { font-size: 13px; color: rgba(245,239,224,0.65); margin-top: 8px; }
+.hero-badge { background: var(--gold-lt); color: var(--brown-dk); padding: 9px 20px; border-radius: 30px; font-size: 13px; font-weight: 600; white-space: nowrap; flex-shrink: 0; }
 @media (max-width: 600px) {
-  .hero-strip  { flex-direction: column; align-items: flex-start; padding: 22px 20px; }
-  .hero-title  { font-size: 22px; }
+  .hero-strip { flex-direction: column; align-items: flex-start; padding: 20px; }
+  .hero-strip::after { right: 10px; opacity: .07; }
+  .hero-title { font-size: 20px; }
 }
 
-/* SECTION HEAD ──────────────────────── */
-.section-head  { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px; margin-bottom: 22px; }
-.section-title { font-family: 'Cormorant Garamond', serif; font-size: 22px; font-weight: 700; color: var(--brown-dk); display: flex; align-items: center; gap: 8px; }
-.count-pill    { font-size: 11px; background: var(--warm); color: var(--muted); padding: 3px 11px; border-radius: 20px; font-family: 'DM Sans', sans-serif; font-weight: 500; }
+/* SECTION */
+.section-head  { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; }
+.section-title { font-family: 'Playfair Display', serif; font-size: 20px; font-weight: 700; color: var(--brown-dk); display: flex; align-items: center; gap: 8px; }
+.count-pill    { font-size: 12px; background: var(--warm); color: var(--muted); padding: 2px 10px; border-radius: 20px; font-family: 'DM Sans', sans-serif; }
 .filter-pills  { display: flex; gap: 8px; flex-wrap: wrap; }
 .pill          { padding: 6px 16px; border-radius: 999px; border: 1.5px solid var(--warm); background: var(--white); font-size: 12px; font-weight: 500; color: var(--muted); cursor: pointer; transition: all .2s; user-select: none; }
-.pill:hover, .pill.active { background: var(--brown); border-color: var(--brown); color: #fff; }
+.pill:hover, .pill.active { background: var(--gold); border-color: var(--gold); color: #fff; }
 
-/* SKELETON ──────────────────────────── */
-.skeleton-card { height: 300px; border-radius: var(--radius); background: linear-gradient(90deg, var(--warm) 25%, var(--warm-lt) 50%, var(--warm) 75%); background-size: 200% 100%; animation: shimmer 1.4s infinite; }
+/* SKELETONS */
+.skeleton-card { height: 320px; border-radius: var(--radius); background: linear-gradient(90deg, var(--warm) 25%, #F0E6C8 50%, var(--warm) 75%); background-size: 200% 100%; animation: shimmer 1.4s infinite; }
 @keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 
-/* EMPTY ─────────────────────────────── */
+/* EMPTY */
 .empty-state      { text-align: center; padding: 60px 20px; color: var(--muted); }
 .empty-state span { font-size: 48px; display: block; margin-bottom: 12px; }
 
-/* GRID ──────────────────────────────── */
-.product-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; }
+/* GRID */
+.product-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 18px; }
 @media (max-width: 480px) { .product-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; } }
 
-/* CARD ──────────────────────────────── */
+/* CARD */
 .product-card {
-  background: var(--card-bg);
-  border-radius: var(--radius);
-  overflow: hidden;
-  border: 1.5px solid var(--warm);
-  box-shadow: var(--shadow);
+  background: var(--white); border-radius: var(--radius); overflow: hidden;
+  border: 1.5px solid var(--warm); box-shadow: var(--shadow);
   transition: transform .22s, box-shadow .22s;
-  position: relative;
+  cursor: pointer; position: relative;
 }
-.product-card:hover { transform: translateY(-3px); box-shadow: 0 10px 32px rgba(92,61,30,0.14); }
+.product-card:hover { transform: translateY(-4px); box-shadow: 0 12px 36px rgba(92,61,30,0.14); }
+.product-card:active { transform: scale(0.98); }
 
-/* THUMB (image area) ────────────────── */
+/* BADGES */
+.corner-badge         { position: absolute; top: 10px; left: 10px; z-index: 2; font-size: 10px; font-weight: 700; padding: 4px 9px; border-radius: 999px; letter-spacing: .3px; }
+.corner-badge.discount { background: var(--gold); color: #fff; }
+.corner-badge.sold-out { background: #3A2410; color: #F5EFE0; }
+
+/* THUMB — fixed height, image or emoji */
 .product-thumb {
-  width: 100%;
-  height: 160px;
-  background: var(--thumb-bg);
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-}
-.product-thumb.thumb-sold { opacity: 0.7; }
-
-.mountain-svg {
-  position: absolute;
-  bottom: 0; left: 0; right: 0;
-  width: 100%; height: 50%;
-  pointer-events: none;
-}
-
-.product-emoji { font-size: 62px; z-index: 1; position: relative; }
-
-/* BADGE ─────────────────────────────── */
-.corner-badge {
-  position: absolute; top: 10px; left: 10px; z-index: 3;
-  font-size: 9px; font-weight: 700; letter-spacing: 0.8px;
-  padding: 4px 10px; border-radius: 999px;
-  font-family: 'DM Sans', sans-serif;
-}
-.badge-default  { background: rgba(58,36,16,0.85); color: var(--cream); }
-.badge-discount { background: var(--gold); color: #fff; }
-.badge-sold     { background: #3A2410; color: #F5EDE0; }
-
-/* BODY ──────────────────────────────── */
-.product-body     { padding: 14px 14px 12px; }
-.product-category {
-  font-size: 9px; font-weight: 700; letter-spacing: 1.2px;
-  text-transform: uppercase; color: var(--muted);
-  margin-bottom: 5px;
-}
-.product-name {
-  font-family: 'Cormorant Garamond', serif;
-  font-size: 20px; font-weight: 700;
-  color: var(--brown-dk); line-height: 1.15;
-  margin-bottom: 10px;
-}
-
-.product-footer {
-  display: flex; align-items: center;
-  justify-content: space-between;
-  margin-bottom: 6px;
-}
-.price-block    { display: flex; align-items: baseline; gap: 5px; flex-direction: column; }
-.price-original { font-size: 11px; color: var(--muted); text-decoration: line-through; line-height: 1; }
-.product-price  { font-size: 22px; font-weight: 700; color: var(--brown-dk); font-family: 'Cormorant Garamond', serif; line-height: 1; }
-
-/* Circle + button — matches image exactly */
-.add-btn-circle {
-  width: 40px; height: 40px;
-  background: var(--brown-dk);
-  color: var(--cream);
-  border: none; border-radius: 10px;
-  font-size: 22px; line-height: 1;
-  cursor: pointer;
+  width: 100%; height: 160px;
   display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0;
-  transition: background .2s, transform .15s;
-  font-family: 'DM Sans', sans-serif;
-  font-weight: 300;
+  background: linear-gradient(135deg, var(--warm) 0%, #E8D5B0 100%);
+  overflow: hidden; position: relative;
 }
-.add-btn-circle:hover:not(:disabled) { background: var(--brown); transform: scale(1.07); }
-.add-btn-disabled { background: var(--warm) !important; color: var(--muted) !important; cursor: not-allowed; transform: none !important; }
+.thumb-img {
+  width: 100%; height: 100%; object-fit: cover;
+  transition: transform .3s;
+}
+.product-card:hover .thumb-img { transform: scale(1.04); }
+.product-emoji  { font-size: 54px; }
+.emoji-fallback { width: 100%; height: 100%; align-items: center; justify-content: center; font-size: 54px; }
 
-.weight-tag  { display: inline-block; font-size: 11px; color: var(--muted); margin-top: 2px; }
-.rating      { font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 3px; margin-top: 6px; }
-.review-count{ font-size: 10px; }
+/* GALLERY STRIP — small thumbnail row below the main image */
+.gallery-strip {
+  display: flex; gap: 5px; padding: 6px 8px;
+  background: var(--warm); overflow-x: auto;
+  scrollbar-width: none;
+}
+.gallery-strip::-webkit-scrollbar { display: none; }
+.gallery-dot-thumb {
+  width: 40px; height: 40px; flex-shrink: 0;
+  border-radius: 6px; overflow: hidden;
+  border: 2px solid transparent;
+  cursor: pointer; transition: border-color .15s;
+}
+.gallery-dot-thumb.active { border-color: var(--gold); }
+.gallery-dot-thumb img { width: 100%; height: 100%; object-fit: cover; }
 
-/* STORY SECTION ─────────────────────── */
-.story-section {
-  background: #3e9e41;
-  border-radius: var(--radius);
-  padding: 36px 28px;
-  margin-top: 40px;
-  color: var(--cream);
-}
-.story-eyebrow {
-  font-size: 11px; letter-spacing: 2px;
-  color: rgba(245,237,224,0.50);
-  margin-bottom: 12px; font-weight: 500;
-}
-.story-title {
-  font-family: 'Cormorant Garamond', serif;
-  font-size: 34px; font-weight: 700;
-  line-height: 1.15; margin-bottom: 14px;
-  color: var(--cream);
-}
-.story-accent { color: #147b27; font-style: italic; }
-.story-body   { font-size: 14px; color: rgba(245,237,224,0.65); line-height: 1.7; max-width: 480px; }
+/* INFO BODY */
+.product-body  { padding: 13px; }
+.product-name  { font-family: 'Playfair Display', serif; font-size: 14px; font-weight: 600; color: var(--brown-dk); margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.product-desc  { font-size: 11px; color: var(--muted); line-height: 1.4; margin-bottom: 8px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.weight-tag    { display: inline-block; font-size: 10px; background: var(--warm); color: var(--muted); padding: 2px 8px; border-radius: 999px; margin-bottom: 8px; }
 
-/* MOBILE BOTTOM NAV ─────────────────── */
+.product-footer { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2px; }
+.price-block    { display: flex; align-items: baseline; gap: 5px; }
+.price-original { font-size: 11px; color: var(--muted); text-decoration: line-through; }
+.product-price  { font-size: 15px; font-weight: 700; color: var(--gold); }
+.rating         { font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 2px; }
+.review-count   { font-size: 10px; }
+
+/* CTA BUTTON */
+.add-btn          { margin-top: 10px; width: 100%; background: var(--brown); color: var(--cream); border: none; border-radius: 8px; padding: 9px; font-size: 13px; font-weight: 500; cursor: pointer; font-family: 'DM Sans', sans-serif; transition: background .2s; position: relative; z-index: 1; }
+.add-btn:hover:not(:disabled) { background: var(--brown-dk); }
+.add-btn-disabled { background: var(--warm) !important; color: var(--muted) !important; cursor: not-allowed; }
+/* "Go to Cart" state — gold highlight */
+.add-btn-incart   { background: var(--gold) !important; color: #fff !important; }
+.add-btn-incart:hover { background: #b07828 !important; }
+
+/* MOBILE BOTTOM NAV */
 .mobile-bottom-nav { display: none; position: fixed; bottom: 0; left: 0; right: 0; background: rgba(255,253,247,0.96); backdrop-filter: blur(14px); border-top: 1.5px solid var(--warm); padding: 8px 0; justify-content: space-around; z-index: 200; }
 @media (max-width: 767px) { .mobile-bottom-nav { display: flex; } }
 .mob-item { display: flex; flex-direction: column; align-items: center; gap: 3px; text-decoration: none; color: var(--muted); font-size: 11px; padding: 4px 14px; border-radius: 10px; transition: color .2s; }
