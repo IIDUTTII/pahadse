@@ -19,9 +19,10 @@ import { db, auth } from '../firebase.js'
 import {
   collection, getDocs, getDoc, query, where,
   doc, setDoc, updateDoc, deleteDoc, addDoc,
-  arrayUnion, increment, serverTimestamp,
-} from 'firebase/firestore'
-import { signOut } from 'firebase/auth'
+  arrayUnion, increment, serverTimestamp,arrayUnion,} from 'firebase/firestore'
+
+import { signOut, sendPasswordResetEmail } from 'firebase/auth'
+
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -49,6 +50,20 @@ function _bustProductListCache() {
   _activeProductsCache = null
 }
 
+
+
+
+
+
+
+export const updateUserDisplayName = async (uid, newName) => {
+  await updateDoc(
+    doc(db, "users", uid),
+    {
+      displayName: newName
+    }
+  )
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PRODUCTS — READ
@@ -400,6 +415,143 @@ export const addProductReview = async (productId, rating, comment) => {
     })
   } catch (error) {
     console.error("Failed submitting user review:", error)
+    throw error
+  }
+}
+
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// USER DOCUMENT CREATION
+// Called from userAuth.js after a new user registers or logs in with Google.
+// Creates/updates a Firestore document for the user with their basic info.
+// This is separate from the auth state and allows us to store additional
+// profile info (like role) and query users by email if needed.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const createUserDocument = async (userData) => {
+
+  await setDoc(
+    doc(db, 'users', userData.uid),
+    {
+      ...userData,
+      createdAt: new Date()
+    },
+    { merge: true }
+  )
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PASSWORD RESET
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Dispatches a single-use cryptographic password reset token link to a user's email address.
+ * @param {string} clientEmail - The target email address provided by the user.
+ * @returns {Promise<void>} Resolves when the email has been successfully transmitted.
+ */
+export const dispatchPasswordResetToken = async (clientEmail) => {
+  if (!clientEmail || !clientEmail.trim()) {
+    throw new Error('EMAIL_REQUIRED')
+  }
+  try {
+    // Core database layer handshake execution node
+    await sendPasswordResetEmail(auth, clientEmail.trim())
+  } catch (error) {
+    console.error('Database Layer — Reset Link Transmission Failure:', error.code)
+    throw error
+  }
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SEMANTIC URL SLUG RESOLUTION
+// ─────────────────────────────────────────────────────────────────────────────
+
+
+
+/**
+ * Resolves a semantic URL name slug back to its live Firestore product document.
+ * @param {string} slug - The lowercase text string from the URL router parameters.
+ * @returns {Promise<object|null>} Matches data payload or returns null.
+ */
+export const fetchProductBySlug = async (slug) => {
+  if (!slug) return null
+  try {
+    // 1. Check our active local memory caches first to save read costs
+    if (_activeProductsCache) {
+      const match = _activeProductsCache.find(p => p.name?.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '') === slug)
+      if (match) return match
+    }
+    
+    // 2. Fallback to cold database query execution track if cache missed
+    const q = query(collection(db, 'products'), where('isActive', '==', true))
+    const snap = await getDocs(q)
+    const allActive = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+    
+    const match = allActive.find(p => p.name?.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '') === slug)
+    return match || null
+  } catch (error) {
+    console.error("Critical failure looking up slug reference:", error)
+    return null
+  }
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// USER ADDRESS MANAGEMENT
+// ─────────────────────────────────────────────────────────────────────────────
+
+
+
+import { arrayUnion } from 'firebase/firestore' // Ensure arrayUnion is in your firestore imports at the top
+
+/**
+ * Appends a new delivery address structure to the authenticated user's account array block.
+ * @param {object} addressData - Validated address input containing label, phone, street, pincode.
+ */
+export const addNewUserAddress = async (addressData) => {
+  const user = auth.currentUser
+  if (!user) throw new Error('NOT_LOGGED_IN')
+  
+  const userRef = doc(db, 'users', user.uid)
+  const uniqueAddressPayload = {
+    id: `addr_${Date.now()}`,
+    ...addressData,
+    isVerified: true
+  }
+
+  // Atomically pushes map item into the users directory array structure
+  await setDoc(userRef, {
+    addresses: arrayUnion(uniqueAddressPayload)
+  }, { merge: true })
+}
+
+/**
+ * Commits a brand-new finalized product order batch manifest down to Firestore.
+ * @param {object} orderPayload - The complete order details including items, address, and amount.
+ * @returns {Promise<string>} The newly generated Firestore Document tracking ID string.
+ */
+export const createCustomerOrderDocument = async (orderPayload) => {
+  const user = auth.currentUser
+  if (!user) throw new Error('NOT_LOGGED_IN')
+
+  try {
+    const orderRef = await addDoc(collection(db, 'orders'), {
+      ...orderPayload,
+      userId: user.uid,
+      shippingStatus: 'pending',
+      trackingId: 'PENDING_DISPATCH',
+      createdAt: serverTimestamp()
+    })
+    
+    // Clear out user's cart bucket array immediately upon successful purchase path handoff
+    await setDoc(doc(db, 'carts', user.uid), { items: [] }, { merge: true })
+    
+    return orderRef.id
+  } catch (error) {
+    console.error("Failed executing order transaction registry block:", error)
     throw error
   }
 }
