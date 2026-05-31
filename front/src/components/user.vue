@@ -1,63 +1,77 @@
 <script setup>
 /**
  * User.vue — Premium Client Management Hub Terminal
- * Fixes: Infinite loading spinner on unauthenticated visits, duplicate upload requests.
+ * Fixes: Restores independent profile configurations, routes chat to dedicated support collection.
  */
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { auth, storage } from '../firebase.js'
+import { auth, storage, db } from '../firebase.js'
 import { onAuthStateChanged, signOut, updateProfile } from 'firebase/auth'
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage'
+import { doc, onSnapshot, collection, query, where, updateDoc, setDoc, arrayUnion, serverTimestamp } from 'firebase/firestore'
 import imageCompression from 'browser-image-compression'
+import { addNewUserAddress, removeUserAddressFromDb, modifyUserAddressInDb } from './db.js'
 
 defineOptions({ name: 'User' })
 const router = useRouter()
 
-const user = ref(null)
-const isEditing = ref(false)
-const activeTab = ref('profile')
-const initializing = ref(true) // Tracks initial authentication verification phases
+const user          = ref(null)
+const isEditingName = ref(false)
+const activeTab     = ref('profile') // profile, shipping, orders, support
+const initializing  = ref(true)
 
-// Local Form States
+const userProfileDoc  = ref(null)
+const userOrdersList  = ref([])
+
+// ── Profile Form States
 const editDisplayName = ref('')
-const isUploading = ref(false)
-const uploadProgress = ref('')
+const isUploading     = ref(false)
+const uploadProgress  = ref('')
+
+// ── Isolated Address Manager
+const isEditingAddress = ref(false)
+const targetingAddressId = ref(null)
+const addressForm = ref({ label: 'Home', fullName: '', phone: '', streetAddress: '', city: '', state: 'Himachal Pradesh', pincode: '' })
+
+// ── Dedicated Support Chat
+const supportMessages = ref([])
+const newChatText     = ref('')
+const isSendingChat   = ref(false)
+let _unsubChat        = null
 
 onMounted(() => {
   onAuthStateChanged(auth, (currentUser) => {
-    if (!currentUser) {
-      // 🚨 FIX: Force clear initialization flags immediately if no active login state exists
-      user.value = null
-      initializing.value = false
-      return
-    }
-
-    // A valid authenticated session exists
+    if (!currentUser) { user.value = null; initializing.value = false; return }
     user.value = currentUser
     editDisplayName.value = currentUser.displayName || ''
-    initializing.value = false
+
+    onSnapshot(doc(db, 'users', currentUser.uid), (snap) => {
+      if (snap.exists()) userProfileDoc.value = snap.data()
+    })
+
+    const ordersQuery = query(collection(db, 'orders'), where('userId', '==', currentUser.uid))
+    onSnapshot(ordersQuery, (snap) => {
+      userOrdersList.value = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      initializing.value = false
+    })
+
+    // 💬 STREAM USER'S DEDICATED SUPPORT THREAD
+    _unsubChat = onSnapshot(doc(db, 'supportChats', currentUser.uid), (snap) => {
+      if (snap.exists()) { supportMessages.value = snap.data().messages || [] }
+    })
   })
 })
 
-// 📸 SECURE COMPRESS & DISPATCH ENGINE
+onUnmounted(() => { if (_unsubChat) _unsubChat() })
+
 const handleImageUpload = async (event) => {
   const file = event.target.files[0]
   if (!file) return
-  if (!file.type.startsWith('image/')) {
-    alert('Please select a valid image file.')
-    return
-  }
-
+  if (!file.type.startsWith('image/')) { alert('Please select an image file.'); return }
   try {
     isUploading.value = true
     uploadProgress.value = 'Compressing image...'
-
-    const options = {
-      maxSizeMB: 0.2,          
-      maxWidthOrHeight: 400,   
-      useWebWorker: true       
-    }
-
+    const options = { maxSizeMB: 0.2, maxWidthOrHeight: 400, useWebWorker: true }
     const compressedFile = await imageCompression(file, options)
     uploadProgress.value = 'Transmitting to servers...'
 
@@ -65,147 +79,211 @@ const handleImageUpload = async (event) => {
     const filePath = `avatars/${user.value.uid}/profile.${fileExtension}`
     const profilePicRef = storageRef(storage, filePath)
 
-    // Optimized payload upload stream
     await uploadBytes(profilePicRef, compressedFile)
     const downloadURL = await getDownloadURL(profilePicRef)
 
     await updateProfile(auth.currentUser, { photoURL: downloadURL })
+    await updateDoc(doc(db, 'users', user.value.uid), { photoURL: downloadURL })
     
-    user.value = { 
-      ...auth.currentUser, 
-      photoURL: downloadURL + '?t=' + new Date().getTime()
-    }
+    user.value = { ...auth.currentUser, photoURL: downloadURL + '?t=' + new Date().getTime() }
     uploadProgress.value = 'Profile picture updated!'
-  } catch (error) {
-    alert('Failed to process image: ' + error.message)
-  } finally {
-    isUploading.value = false
-    setTimeout(() => { uploadProgress.value = '' }, 3000)
-  }
+  } catch (error) { alert('Image process failed: ' + error.message) } 
+  finally { isUploading.value = false; setTimeout(() => { uploadProgress.value = '' }, 3000) }
 }
 
 const saveProfileChanges = async () => {
   if (!editDisplayName.value.trim()) return
   try {
     isUploading.value = true
-    await updateProfile(auth.currentUser, { displayName: editDisplayName.value })
+    await updateProfile(auth.currentUser, { displayName: editDisplayName.value.trim() })
+    await updateDoc(doc(db, 'users', user.value.uid), { displayName: editDisplayName.value.trim() })
     user.value = { ...auth.currentUser }
-    isEditing.value = false
-  } catch (error) {
-    alert('Error updating identity signature: ' + error.message)
-  } finally {
-    isUploading.value = false
-  }
+    isEditingName.value = false
+  } catch (error) { alert(error.message) } 
+  finally { isUploading.value = false }
 }
 
-const handleLogout = async () => {
-  if (!confirm('Log out from your personal account hub terminal?')) return
-  await signOut(auth)
-  router.push('/login')
+const initializeNewAddressForm = () => {
+  targetingAddressId.value = null; isEditingAddress.value = true
+  addressForm.value = { label: 'Home', fullName: '', phone: '', streetAddress: '', city: '', state: 'Himachal Pradesh', pincode: '' }
 }
+const initializeEditAddressForm = (addr) => {
+  targetingAddressId.value = addr.id; isEditingAddress.value = true
+  addressForm.value = { ...addr }
+}
+const commitAddressFormAction = async () => {
+  const f = addressForm.value
+  if (!f.fullName || !f.phone || !f.streetAddress || !f.pincode) { alert('Required bounds missing.'); return }
+  try {
+    if (targetingAddressId.value) { await modifyUserAddressInDb(targetingAddressId.value, { ...f }) } 
+    else { await addNewUserAddress({ ...f }) }
+    isEditingAddress.value = false
+  } catch (e) { alert(e.message) }
+}
+const dropAddressNode = async (addrId) => { if (confirm('Delete this delivery address?')) await removeUserAddressFromDb(addrId) }
+
+// 💬 SEND CUSTOMER SUPPORT MESSAGE (Inline execution for robustness)
+const handleSendMessage = async () => {
+  if (!newChatText.value.trim() || !user.value) return
+  isSendingChat.value = true
+  try {
+    const chatRef = doc(db, 'supportChats', user.value.uid)
+    await setDoc(chatRef, {
+      userName: user.value.displayName || 'Pahari User',
+      lastUpdated: serverTimestamp(),
+      messages: arrayUnion({
+        text: newChatText.value.trim(),
+        role: 'user',
+        timestamp: Date.now()
+      })
+    }, { merge: true })
+    newChatText.value = ''
+  } catch (e) { alert(e.message) }
+  isSendingChat.value = false
+}
+
+const handleLogout = async () => { if (confirm('Log out?')) { await signOut(auth); router.push('/login') } }
+const fmtTime = (ms) => ms ? new Date(ms).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : ''
 </script>
 
 <template>
   <div class="user-workspace-page">
-    
-    <!-- 1. Processing state while checking Auth layer -->
-    <div v-if="initializing" class="center-loading-state">
-      <div class="spinner"></div>
-      <p>Verifying secure identity context records…</p>
-    </div>
+    <div v-if="initializing" class="center-loading-state"><div class="spinner"></div><p>Verifying secure identity context records…</p></div>
 
-    <!-- 2. Main Fluid Dashboard Structure if authenticated -->
     <div v-else-if="user" class="dashboard-hub-container fade-in">
       
-      <!-- LEFT COLUMN: ACCOUNT AVATAR & NAVIGATION TERMINAL -->
+      <!-- SIDEBAR AVATAR -->
       <aside class="dashboard-sidebar-pane">
         <div class="profile-avatar-assembly">
           <div class="avatar-image-frame">
-            <img 
-              :src="user.photoURL || 'https://api.dicebear.com/7.x/bottts/svg?seed=' + user.uid" 
-              alt="Profile Picture" 
-              class="avatar-element"
-              referrerpolicy="no-referrer" 
-            />
+            <img :src="user.photoURL || 'https://api.dicebear.com/7.x/bottts/svg?seed=' + user.uid" class="avatar-element" />
             <label class="upload-interactive-overlay" :class="{ 'is-disabled': isUploading }">
-              📷 Click to Change
+              📷 Change
               <input type="file" accept="image/*" @change="handleImageUpload" :disabled="isUploading" hidden />
             </label>
           </div>
           <h3 class="sidebar-user-headline">{{ user.displayName || 'Pahari User' }}</h3>
           <span class="sidebar-email-subtag">{{ user.email }}</span>
         </div>
-
         <div v-if="uploadProgress" class="progress-ticker-badge">{{ uploadProgress }}</div>
 
         <nav class="sidebar-tab-menu-stack">
-          <button :class="['menu-tab-btn', { 'is-active': activeTab === 'profile' }]" @click="activeTab = 'profile'">👤 Profile Blueprint</button>
-          <button :class="['menu-tab-btn', { 'is-active': activeTab === 'orders' }]" @click="activeTab = 'orders'">🛍️ Harvest Orders Ledger</button>
-          <button :class="['menu-tab-btn', { 'is-active': activeTab === 'security' }]" @click="activeTab = 'security'">🔒 Identity Credentials</button>
-          <button @click="handleLogout" class="sidebar-logout-action-btn">Terminate Session (Logout)</button>
+          <button :class="['menu-tab-btn', { 'is-active': activeTab === 'profile' }]" @click="activeTab = 'profile'">👤 Profile Settings</button>
+          <button :class="['menu-tab-btn', { 'is-active': activeTab === 'shipping' }]" @click="activeTab = 'shipping'">📦 Shipping Workspace</button>
+          <button :class="['menu-tab-btn', { 'is-active': activeTab === 'orders' }]" @click="activeTab = 'orders'">🛍️ Orders Ledger</button>
+          <button :class="['menu-tab-btn', { 'is-active': activeTab === 'support' }]" @click="activeTab = 'support'">💬 Support & Help</button>
+          <button @click="handleLogout" class="sidebar-logout-action-btn">Log Out</button>
         </nav>
       </aside>
 
-      <!-- RIGHT COLUMN: DYNAMIC CONTENT PANEL SPACE -->
       <main class="dashboard-workspace-workspace">
+        
+        <!-- 👤 TAB 1: PROFILE INTERFACE -->
         <div v-if="activeTab === 'profile'" class="tab-fade-panel">
-          <h2 class="workspace-section-title">Identity Registry Settings</h2>
-          <p class="workspace-section-subtitle">Manage public authentication naming tokens and verification signatures.</p>
-
+          <h2 class="workspace-section-title">Identity Profile Settings</h2>
+          <p class="workspace-section-subtitle">Manage public naming conventions bound onto system invoices.</p>
           <div class="workspace-card-box">
-            <div class="detail-display-block" v-if="!isEditing">
-              <div class="metadata-row">
-                <span class="field-label">Assigned Account Name</span>
-                <span class="field-value-bold">{{ user.displayName || 'Pahari User' }}</span>
-              </div>
-              <button class="pahadse-action-outline-btn" @click="isEditing = true">📝 Mutate Display Name</button>
+            <div v-if="!isEditingName" style="display:flex; justify-content:space-between; align-items:center;">
+              <div><span class="field-label">Account Username</span><br><span class="field-value-bold" style="font-size:1.4rem;">{{ user.displayName || 'Pahari User' }}</span></div>
+              <button class="pahadse-action-outline-btn" @click="isEditingName = true">📝 Edit Name</button>
             </div>
-
             <div v-else class="detail-edit-form-block">
-              <div class="input-wrapper-field">
-                <label>Update Full Display Username Signature</label>
-                <input v-model="editDisplayName" class="pahadse-core-input" placeholder="Enter Full Name" :disabled="isUploading" />
-              </div>
-              <div class="action-buttons-group-row">
-                <button @click="saveProfileChanges" class="commit-save-btn" :disabled="isUploading">Save Changes</button>
-                <button @click="isEditing = false" class="cancel-discard-btn" :disabled="isUploading">Cancel</button>
-              </div>
+              <div class="input-wrapper-field"><label>Update Display Full Naming Signature</label><input v-model="editDisplayName" class="pahadse-core-input" /></div>
+              <div class="action-buttons-group-row" style="display:flex; gap:10px; margin-top:12px;"><button class="commit-save-btn" @click="saveProfileChanges">Save Identity</button><button class="cancel-discard-btn" @click="isEditingName = false">Cancel</button></div>
             </div>
           </div>
         </div>
 
+        <!-- 📦 TAB 2: ISOLATED ADDRESS MANAGEMENT -->
+        <div v-if="activeTab === 'shipping'" class="tab-fade-panel">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
+            <div><h2 class="workspace-section-title">Isolated Shipping Workspace</h2><p class="workspace-section-subtitle">Manage delivery pins safely.</p></div>
+            <button v-if="!isEditingAddress" class="commit-save-btn" @click="initializeNewAddressForm">+ Create New Route</button>
+          </div>
+
+          <div v-if="isEditingAddress" class="workspace-card-box tab-fade-panel" style="margin-bottom:24px;">
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+              <div class="input-wrapper-field"><label>Address Designation Tag</label><select v-model="addressForm.label" class="pahadse-core-input"><option>Home</option><option>Work/Office</option><option>Village Base</option></select></div>
+              <div class="input-wrapper-field"><label>Recipient Full Name</label><input v-model="addressForm.fullName" class="pahadse-core-input" /></div>
+              <div class="input-wrapper-field"><label>Phone</label><input v-model="addressForm.phone" class="pahadse-core-input" /></div>
+              <div class="input-wrapper-field" style="grid-column:1/-1;"><label>Street Details</label><input v-model="addressForm.streetAddress" class="pahadse-core-input" /></div>
+              <div class="input-wrapper-field"><label>City / Tehsil</label><input v-model="addressForm.city" class="pahadse-core-input" /></div>
+              <div class="input-wrapper-field"><label>Pincode</label><input v-model="addressForm.pincode" type="number" class="pahadse-core-input" /></div>
+            </div>
+            <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:20px;"><button class="cancel-discard-btn" @click="isEditingAddress = false">Cancel</button><button class="commit-save-btn" @click="commitAddressFormAction">Commit Route</button></div>
+          </div>
+
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px;">
+            <div v-for="addr in userProfileDoc?.addresses || []" :key="addr.id" class="workspace-card-box" style="border:2px solid #111827;">
+              <div style="display:flex; justify-content:space-between;"><span class="verification-badge verified">{{ addr.label }}</span>
+                <div style="display:flex; gap:10px;"><button @click="initializeEditAddressForm(addr)" style="background:none; border:none; cursor:pointer; color:#ca8a04; font-weight:800;">Edit</button><button @click="dropAddressNode(addr.id)" style="background:none; border:none; cursor:pointer; color:#dc2626; font-weight:800;">Delete</button></div>
+              </div>
+              <h4 style="margin:12px 0 4px; font-weight:900;">{{ addr.fullName }}</h4>
+              <p style="margin:0 0 10px; font-size:0.9rem; color:#4b5563; line-height:1.4;">{{ addr.streetAddress }}, {{ addr.city }}, {{ addr.state }} - {{ addr.pincode }}</p>
+              <span style="font-weight:800; font-size:0.85rem;">📞 {{ addr.phone }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 🛍️ TAB 3: ORDERS LOG (Chat removed) -->
         <div v-if="activeTab === 'orders'" class="tab-fade-panel">
-          <h2 class="workspace-section-title">Provisions Dispatch Tracking</h2>
-          <p class="workspace-section-subtitle">Monitor secure raw mountain harvest allotments and bilona ghee allocations.</p>
-          <div class="empty-ledger-placeholder-state">
-            <span class="placeholder-glyph">🛒</span>
-            <h4>No Active Dispatches Placed</h4>
-            <p>Your current client cryptographic token contains no finalized checkout runs.</p>
-            <button class="return-marketplace-btn" @click="router.push('/')">Browse Fresh Batches</button>
+          <h2 class="workspace-section-title">Provisions Dispatches History</h2>
+          <p class="workspace-section-subtitle">Track parcel trajectories.</p>
+          
+          <div style="display:flex; flex-direction:column; gap:20px;">
+            <div v-for="order in userOrdersList" :key="order.id" class="workspace-card-box" style="border:2px solid #111827;">
+              <div style="display:flex; justify-content:space-between; margin-bottom:12px; border-bottom:2px dashed #cbd5e1; padding-bottom:10px;">
+                <code>REF ID: {{ order.id }}</code><strong style="font-size:1.1rem;">Total Settle: ₹{{ order.amount }}</strong>
+              </div>
+              <div style="margin-bottom:12px;"><div v-for="item in order.items" :key="item.productId" style="font-size:0.95rem; font-weight:600;"><span>{{ item.emoji || '📦' }}</span> {{ item.name }} × {{ item.quantity }}</div></div>
+              
+              <div v-if="order.shippingStatus === 'rejected'" style="background:#fef2f2; border:2px solid #fca5a5; padding:12px; border-radius:8px; color:#dc2626; margin-bottom:12px; font-size:0.95rem;">
+                <strong>🛑 Order Rejected by Administration</strong>
+                <p v-if="order.adminComment" style="margin:4px 0 0; font-weight:700;">Reason: "{{ order.adminComment }}"</p>
+              </div>
+
+              <div style="display:flex; justify-content:space-between; align-items:center; background:#f8fafc; padding:12px; border-radius:8px; border:1px solid #cbd5e1;">
+                <div><span class="verification-badge" :class="order.shippingStatus === 'shipped' ? 'verified' : 'unverified'">Freight: {{ order.shippingStatus || 'pending' }}</span></div>
+                <div v-if="order.shippingStatus === 'shipped' && order.trackingId">
+                  <a :href="'https://www.shiprocket.in/shipment-tracking/' + order.trackingId" target="_blank" class="pahadse-action-outline-btn" style="margin:0; background:#111827; color:#ffffff; text-decoration:none;">🚚 Track Parcel Online →</a>
+                </div>
+              </div>
+            </div>
+            <div v-if="userOrdersList.length === 0" style="padding:40px; text-align:center; color:#64748b; font-weight:600; border:2px dashed #cbd5e1; border-radius:12px;">No order shipments recorded.</div>
           </div>
         </div>
 
-        <div v-if="activeTab === 'security'" class="tab-fade-panel">
-          <h2 class="workspace-section-title">Security & Cryptographic Details</h2>
-          <p class="workspace-section-subtitle">System identification references mapped on cloud routing data tracks.</p>
-          <div class="workspace-card-box security-specs">
-            <div class="metadata-row border-bottom"><span class="field-label">Account UID Identifier Hash</span><code class="security-hash-block">{{ user.uid }}</code></div>
-            <div class="metadata-row border-bottom"><span class="field-label">Account Core Registry Email</span><span class="field-value-bold">{{ user.email }}</span></div>
-            <div class="metadata-row"><span class="field-label">Email Verified Signature</span><span :class="['verification-badge', user.emailVerified ? 'verified' : 'unverified']">{{ user.emailVerified ? '✓ Authenticated Protocol' : '⚠️ Verification Pending' }}</span></div>
+        <!-- 💬 TAB 4: NEW DEDICATED SUPPORT & HELP DESK -->
+        <div v-if="activeTab === 'support'" class="tab-fade-panel" style="display:flex; flex-direction:column; height: 100%;">
+          <h2 class="workspace-section-title">Customer Support Desk</h2>
+          <p class="workspace-section-subtitle">Chat directly with the PahadSe team regarding active orders, delays, or quality.</p>
+          
+          <div class="workspace-card-box" style="flex:1; display:flex; flex-direction:column; padding:0; overflow:hidden; border:2px solid #111827; min-height: 400px;">
+            <!-- Thread Feed Area -->
+            <div style="flex:1; padding:24px; overflow-y:auto; background:#f8fafc; display:flex; flex-direction:column; gap:14px;">
+              <div v-if="supportMessages.length === 0" style="text-align:center; color:#64748b; margin-top:40px; font-weight:600;">Type a message below to start your support thread.</div>
+              
+              <div v-for="(msg, i) in supportMessages" :key="i" :style="{ alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start', maxWidth: '80%' }">
+                <div style="font-size:0.75rem; color:#64748b; margin-bottom:4px; font-weight:700;" :style="{ textAlign: msg.role === 'user' ? 'right' : 'left' }">
+                  {{ msg.role === 'user' ? 'You' : 'PahadSe Admin' }} • {{ fmtTime(msg.timestamp) }}
+                </div>
+                <div style="padding:12px 16px; border-radius:12px; font-size:0.95rem; font-weight:600; line-height:1.4;" 
+                     :style="{ background: msg.role === 'user' ? '#111827' : '#ffffff', color: msg.role === 'user' ? '#fff' : '#0f172a', border: msg.role === 'user' ? 'none' : '2px solid #cbd5e1' }">
+                  {{ msg.text }}
+                </div>
+              </div>
+            </div>
+            
+            <!-- Send Field -->
+            <div style="padding:16px; background:#ffffff; border-top:2px solid #cbd5e1; display:flex; gap:10px;">
+              <input v-model="newChatText" placeholder="Type your message here..." class="pahadse-core-input" style="flex:1; padding:12px;" @keyup.enter="handleSendMessage" />
+              <button class="commit-save-btn" style="padding:12px 28px; border-radius:8px;" @click="handleSendMessage" :disabled="isSendingChat">{{ isSendingChat ? '...' : 'Send' }}</button>
+            </div>
           </div>
         </div>
+
       </main>
-
     </div>
-
-    <!-- 3. Clean fallback dashboard view shown when user is explicitly logged out -->
-    <div v-else class="logged-out-boundary-card fade-in">
-      <span class="boundary-icon">🏔️</span>
-      <h3>Log In Required</h3>
-      <p>No active session signature discovered on this node. Please log in first to view your profile metrics.</p>
-      <button class="commit-save-btn text-center spec-width" @click="router.push('/login')">Go to Login</button>
-    </div>
-
   </div>
 </template>
 
@@ -214,73 +292,35 @@ const handleLogout = async () => {
 .center-loading-state { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 50vh; gap: 16px; color: #6b7280; }
 .spinner { width: 44px; height: 44px; border: 3px solid #e5e7eb; border-top-color: #16a34a; border-radius: 50%; animation: spin 0.85s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
-
-.dashboard-hub-container { width: 100%; max-width: 1140px; margin: 0 auto; background-color: #ffffff; border: 2px solid #111827; border-radius: 16px; display: grid; grid-template-columns: 32% 68%; overflow: hidden; box-shadow: 0 20px 40px -15px rgba(28,25,23,0.06); }
-.dashboard-sidebar-pane { background-color: #ffffff; border-right: 2px solid #111827; padding: 40px 24px; display: flex; flex-direction: column; box-sizing: border-box; }
+.dashboard-hub-container { width: 100%; max-width: 1140px; margin: 0 auto; background-color: #ffffff; border: 2px solid #111827; border-radius: 16px; display: grid; grid-template-columns: 32% 68%; overflow: hidden; }
+.dashboard-sidebar-pane { background-color: #ffffff; border-right: 2px solid #111827; padding: 40px 24px; display: flex; flex-direction: column; }
 .profile-avatar-assembly { text-align: center; margin-bottom: 30px; }
-.avatar-image-frame { position: relative; width: 110px; height: 110px; margin: 0 auto 16px; border-radius: 50%; overflow: hidden; border: 3px solid #111827; background-color: #f3f4f6; }
+.avatar-image-frame { position: relative; width: 110px; height: 110px; margin: 0 auto 16px; border-radius: 50%; overflow: hidden; border: 3px solid #111827; }
 .avatar-element { width: 100%; height: 100%; object-fit: cover; }
 .upload-interactive-overlay { position: absolute; bottom: 0; left: 0; width: 100%; background: rgba(17, 24, 39, 0.85); color: #ffffff; font-size: 0.72rem; font-weight: 700; padding: 6px 0; cursor: pointer; opacity: 0; transition: opacity 0.2s ease; display: block; }
 .avatar-image-frame:hover .upload-interactive-overlay { opacity: 1; }
-.sidebar-user-headline { font-size: 1.35rem; font-weight: 900; color: #111827; margin: 0 0 4px; }
-.sidebar-email-subtag { font-size: 0.85rem; color: #6b7280; }
-.progress-ticker-badge { text-align: center; background-color: #dcfce7; color: #16a34a; font-size: 0.8rem; font-weight: 700; padding: 6px 12px; border-radius: 6px; margin-bottom: 20px; border: 1px solid #bbf7d0; }
+.sidebar-user-headline { font-size: 1.35rem; font-weight: 900; margin: 0 0 4px; color: #0f172a; }
+.sidebar-email-subtag { font-size: 0.85rem; color: #475569; font-weight: 600; }
 .sidebar-tab-menu-stack { display: flex; flex-direction: column; gap: 8px; }
-.menu-tab-btn { width: 100%; padding: 14px 16px; background: transparent; border: none; border-radius: 8px; font-size: 0.95rem; font-weight: 700; color: #4b5563; text-align: left; cursor: pointer; }
-.menu-tab-btn:hover { background-color: #f3f4f6; color: #111827; }
+.menu-tab-btn { width: 100%; padding: 14px 16px; background: transparent; border: none; border-radius: 8px; font-size: 0.95rem; font-weight: 800; color: #475569; text-align: left; cursor: pointer; }
+.menu-tab-btn:hover { background-color: #f1f5f9; color: #0f172a; }
 .menu-tab-btn.is-active { background-color: #111827; color: #FAF6F0; }
-.sidebar-logout-action-btn { width: 100%; padding: 14px 16px; background: transparent; border: 2px dashed #ef4444; color: #ef4444; border-radius: 8px; font-size: 0.92rem; font-weight: 700; cursor: pointer; margin-top: 24px; }
-.sidebar-logout-action-btn:hover { background-color: #fef2f2; }
-
-.dashboard-workspace-workspace { background-color: #f9fafb; padding: 50px; box-sizing: border-box; }
-.workspace-section-title { font-family: 'Cinzel', serif; font-size: 1.8rem; font-weight: 700; color: #111827; margin: 0 0 6px; }
-.workspace-section-subtitle { font-size: 0.95rem; color: #6b7280; margin: 0 0 32px; }
+.sidebar-logout-action-btn { width: 100%; padding: 14px 16px; background: transparent; border: 2px dashed #ef4444; color: #ef4444; border-radius: 8px; font-size: 0.92rem; font-weight: 800; cursor: pointer; margin-top: 24px; }
+.dashboard-workspace-workspace { background-color: #f8fafc; padding: 50px; }
+.workspace-section-title { font-family: 'Cinzel', serif; font-size: 1.8rem; font-weight: 800; margin: 0 0 6px; color: #0f172a; }
+.workspace-section-subtitle { font-size: 0.95rem; color: #475569; margin: 0 0 32px; font-weight: 600; }
 .workspace-card-box { background-color: #ffffff; border: 2px solid #cbd5e1; border-radius: 12px; padding: 28px; }
-.metadata-row { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; gap: 16px; flex-wrap: wrap; }
-.metadata-row.border-bottom { border-bottom: 1px solid #f1f5f9; }
-.field-label { font-size: 0.9rem; font-weight: 800; text-transform: uppercase; color: #4b5563; }
-.field-value-bold { font-size: 1.1rem; font-weight: 800; color: #111827; }
-.pahadse-action-outline-btn { background: #ffffff; color: #111827; border: 2px solid #111827; padding: 8px 18px; border-radius: 6px; font-size: 0.88rem; font-weight: 700; cursor: pointer; margin-top: 16px; }
-.detail-edit-form-block { display: flex; flex-direction: column; gap: 16px; }
-.input-wrapper-field { display: flex; flex-direction: column; gap: 6px; }
-.input-wrapper-field label { font-size: 0.85rem; font-weight: 800; color: #111827; }
-.pahadse-core-input { padding: 14px; border: 2px solid #cbd5e1; border-radius: 8px; font-size: 0.95rem; width: 100%; box-sizing: border-box; outline: none; }
-.pahadse-core-input:focus { border-color: #16a34a; }
-.action-buttons-group-row { display: flex; gap: 10px; justify-content: flex-end; }
-.commit-save-btn { background-color: #111827; color: #FAF6F0; border: none; padding: 12px 28px; border-radius: 30px; font-size: 0.9rem; font-weight: 700; cursor: pointer; }
-.commit-save-btn.spec-width { width: 100%; max-width: 240px; margin: 0 auto; display: block; }
-.commit-save-btn:hover { background-color: #16a34a; }
-.cancel-discard-btn { background: #ffffff; color: #4b5563; border: 2px solid #cbd5e1; padding: 12px 24px; border-radius: 30px; font-size: 0.9rem; font-weight: 700; cursor: pointer; }
-
-.empty-ledger-placeholder-state { text-align: center; padding: 60px 20px; background: #ffffff; border: 2px dashed #cbd5e1; border-radius: 12px; }
-.placeholder-glyph { font-size: 3.5rem; display: block; margin-bottom: 12px; }
-.empty-ledger-placeholder-state h4 { margin: 0 0 6px; font-size: 1.2rem; font-weight: 800; color: #111827; }
-.empty-ledger-placeholder-state p { margin: 0 0 24px; font-size: 0.92rem; line-height: 1.5; }
-.return-marketplace-btn { background-color: #16a34a; color: #ffffff; border: none; padding: 12px 28px; border-radius: 30px; font-weight: 700; cursor: pointer; }
-
-.security-hash-block { background-color: #f3f4f6; padding: 4px 10px; border-radius: 6px; border: 1px solid #cbd5e1; font-weight: 700; color: #111827; font-family: monospace; word-break: break-all; }
-.verification-badge { font-size: 0.82rem; font-weight: 800; padding: 4px 12px; border-radius: 20px; text-transform: uppercase; }
-.verification-badge.verified { background-color: #dcfce7; color: #16a34a; }
-.verification-badge.unverified { background-color: #fef2f2; color: #dc2626; }
-
-.logged-out-boundary-card { max-width: 420px; margin: 40px auto; background-color: #ffffff; border: 2px solid #111827; border-radius: 14px; padding: 40px 30px; text-align: center; }
-.boundary-icon { font-size: 3.5rem; display: block; margin-bottom: 12px; }
-.logged-out-boundary-card h3 { font-family: 'Cinzel', serif; font-size: 1.4rem; margin: 0 0 8px; }
-.logged-out-boundary-card p { font-size: 0.95rem; color: #4b5563; line-height: 1.6; margin: 0 0 24px; }
-
+.field-label { font-size: 0.85rem; font-weight: 900; text-transform: uppercase; color: #475569; }
+.field-value-bold { font-weight: 900; color: #0f172a; }
+.pahadse-action-outline-btn { background: #ffffff; color: #111827; border: 2px solid #111827; padding: 8px 18px; border-radius: 8px; font-size: 0.88rem; font-weight: 800; cursor: pointer; margin-top: 16px; }
+.pahadse-core-input { padding: 14px; border: 2px solid #cbd5e1; border-radius: 8px; font-size: 0.95rem; width: 100%; box-sizing: border-box; outline: none; background: #f8fafc; font-weight: 600; color: #0f172a; }
+.commit-save-btn { background-color: #111827; color: #FAF6F0; border: none; padding: 12px 28px; border-radius: 8px; font-size: 0.9rem; font-weight: 800; cursor: pointer; }
+.cancel-discard-btn { background: #ffffff; color: #475569; border: 2px solid #cbd5e1; padding: 12px 24px; border-radius: 8px; font-size: 0.9rem; font-weight: 800; cursor: pointer; }
+.verification-badge { font-size: 0.75rem; font-weight: 900; padding: 6px 14px; border-radius: 20px; text-transform: uppercase; display: inline-block; }
+.verification-badge.verified { background-color: #dcfce7; color: #16a34a; border: 2px solid #bbf7d0; }
+.verification-badge.unverified { background-color: #fff7ed; color: #c2410c; border: 2px solid #ffedd5; }
 .tab-fade-panel { animation: fIn 0.25s ease-out; }
 .fade-in { animation: fIn 0.3s ease-out; }
 @keyframes fIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
-
-@media (max-width: 840px) {
-  .dashboard-hub-container { grid-template-columns: 1fr; }
-  .dashboard-sidebar-pane { border-right: none; border-bottom: 2px solid #111827; padding: 30px 20px; }
-  .dashboard-workspace-workspace { padding: 32px 20px; }
-}
-@media (max-width: 480px) {
-  .user-workspace-page { padding-top: calc(90px + 20px); padding-left: 10px; padding-right: 10px; }
-  .dashboard-hub-container { border-radius: 12px; }
-  .workspace-section-title { font-size: 1.5rem; }
-  .workspace-card-box { padding: 16px; }
-}
+@media (max-width: 840px) { .dashboard-hub-container { grid-template-columns: 1fr; } .dashboard-sidebar-pane { border-right: none; border-bottom: 2px solid #111827; } }
 </style>

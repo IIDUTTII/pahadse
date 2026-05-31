@@ -7,102 +7,53 @@
  *   • Cache is busted only when a write happens that affects the cached data.
  *   • logProductView is debounced per-product-per-session so a refresh
  *     doesn't double-count and waste a write.
- *
- * TO SWAP TO SUPABASE LATER:
- *   1. Replace firebase imports with your supabase client.
- *   2. Re-implement each function — keep names + return shapes identical.
- *   3. Zero changes needed in any Vue file.
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
 import { db, auth } from '../firebase.js'
 import {
   collection, getDocs, getDoc, query, where,
-  doc, setDoc, updateDoc, deleteDoc, addDoc,
-  arrayUnion, increment, serverTimestamp,arrayUnion,} from 'firebase/firestore'
-
+  doc, setDoc, updateDoc, deleteDoc, addDoc, increment, serverTimestamp, arrayUnion
+} from 'firebase/firestore'
 import { signOut, sendPasswordResetEmail } from 'firebase/auth'
-
-
 
 // ─────────────────────────────────────────────────────────────────────────────
 // IN-MEMORY CACHE LAYER
-// Saves Firebase reads (= money) for data that rarely changes mid-session.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** @type {Product[] | null} */
 let _activeProductsCache = null
-
-/** @type {Map<string, Product>} — keyed by productId */
 const _productCache = new Map()
-
-/** @type {Map<string, object>} — keyed by userId */
 const _cartCache = new Map()
-
-/** @type {Map<string, string>} — keyed by userId, value = role string */
 const _userRoleCache = new Map()
-
-/** Set of productIds viewed this session — prevents double-counting views */
 const _viewedThisSession = new Set()
 
-/** Wipe the active-products list cache (call after any product write) */
 function _bustProductListCache() {
   _activeProductsCache = null
 }
 
-
-
-
-
-
-
 export const updateUserDisplayName = async (uid, newName) => {
-  await updateDoc(
-    doc(db, "users", uid),
-    {
-      displayName: newName
-    }
-  )
+  await updateDoc(doc(db, "users", uid), { displayName: newName })
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PRODUCTS — READ
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Fetch all active products (Home page grid).
- * Result is cached for the session; subsequent calls return instantly.
- * @returns {Promise<Product[]>}
- */
 export async function fetchActiveProducts() {
   if (_activeProductsCache !== null) {
     return _activeProductsCache
   }
-  const snap = await getDocs(
-    query(collection(db, 'products'), where('isActive', '==', true))
-  )
+  const snap = await getDocs(query(collection(db, 'products'), where('isActive', '==', true)))
   _activeProductsCache = snap.docs.map(d => ({ id: d.id, ...d.data() }))
-  // Also populate per-product cache while we have the data — free bonus reads
   _activeProductsCache.forEach(p => _productCache.set(p.id, p))
   return _activeProductsCache
 }
 
-/**
- * Fetch ALL products (admin dashboard — includes inactive).
- * NOT cached because the dashboard needs live data via onSnapshot anyway.
- * @returns {Promise<Product[]>}
- */
 export async function fetchAllProducts() {
   const snap = await getDocs(collection(db, 'products'))
   return snap.docs.map(d => ({ id: d.id, ...d.data() }))
 }
 
-/**
- * Fetch a single product by Firestore document ID.
- * Checks per-product cache first; only hits Firestore on a cold load.
- * @param {string} productId
- * @returns {Promise<Product | null>}
- */
 export async function fetchProductById(productId) {
   if (_productCache.has(productId)) {
     return _productCache.get(productId)
@@ -114,17 +65,10 @@ export async function fetchProductById(productId) {
   return product
 }
 
-
 // ─────────────────────────────────────────────────────────────────────────────
 // PRODUCTS — WRITE  (admin only)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Add a brand-new product document to Firestore.
- * Busts the active-products cache so the home page re-fetches.
- * @param {object} payload  — matches the Himalayan product schema
- * @returns {Promise<string>}  — the new document ID
- */
 export async function addProduct(payload) {
   const ref = await addDoc(collection(db, 'products'), {
     ...payload,
@@ -134,29 +78,14 @@ export async function addProduct(payload) {
   return ref.id
 }
 
-/**
- * Update an existing product document.
- * Also updates the per-product cache immediately so reads stay consistent.
- * @param {string} productId
- * @param {object} payload  — partial update (only changed fields)
- * @returns {Promise<void>}
- */
 export async function updateProduct(productId, payload) {
   await updateDoc(doc(db, 'products', productId), payload)
-  // Merge into per-product cache
   if (_productCache.has(productId)) {
     _productCache.set(productId, { ..._productCache.get(productId), ...payload })
   }
   _bustProductListCache()
 }
 
-/**
- * Toggle the isActive (live/offline) flag for a product.
- * Used by the admin dashboard Live Status toggle.
- * @param {string}  productId
- * @param {boolean} currentValue  — pass the current value; we flip it
- * @returns {Promise<void>}
- */
 export async function toggleProductActive(productId, currentValue) {
   const newValue = !currentValue
   await updateDoc(doc(db, 'products', productId), { isActive: newValue })
@@ -166,38 +95,24 @@ export async function toggleProductActive(productId, currentValue) {
   _bustProductListCache()
 }
 
-/**
- * Permanently delete a product document.
- * @param {string} productId
- * @returns {Promise<void>}
- */
 export async function deleteProduct(productId) {
   await deleteDoc(doc(db, 'products', productId))
   _productCache.delete(productId)
   _bustProductListCache()
 }
 
-
 // ─────────────────────────────────────────────────────────────────────────────
 // ANALYTICS
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Log a product page view — debounced per session per product.
- * Fire-and-forget: do NOT await this in the caller.
- * @param {string} productId
- */
 export async function logProductView(productId) {
-  // If already logged this product this session, skip the write entirely
   if (_viewedThisSession.has(productId)) return
   _viewedThisSession.add(productId)
 
   try {
-    await updateDoc(doc(db, 'products', productId), {
-      viewCount: increment(1),
-    })
+    await updateDoc(doc(db, 'products', productId), { viewCount: increment(1) })
     const userId = auth.currentUser?.uid ?? 'anonymous'
-    await setDoc(doc(collection(db, 'productViews')), {
+    await addDoc(collection(db, 'productViews'), {
       productId,
       userId,
       viewedAt: serverTimestamp(),
@@ -207,60 +122,31 @@ export async function logProductView(productId) {
   }
 }
 
-
 // ─────────────────────────────────────────────────────────────────────────────
 // CART
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Fetch the current user's cart document once.
- * Returns a cached copy on repeat calls within the same session.
- * The live onSnapshot in cartview.vue keeps the UI in sync — this is
- * only for cheap "is item in cart?" checks from home/detail pages.
- *
- * @returns {Promise<CartItem[]>}
- */
 export async function fetchCart() {
   const user = auth.currentUser
   if (!user) return []
-
-  if (_cartCache.has(user.uid)) {
-    return _cartCache.get(user.uid).items ?? []
-  }
-
+  if (_cartCache.has(user.uid)) return _cartCache.get(user.uid).items ?? []
+  
   const snap = await getDoc(doc(db, 'carts', user.uid))
   const data = snap.exists() ? snap.data() : { items: [] }
   _cartCache.set(user.uid, data)
   return data.items ?? []
 }
 
-/**
- * Invalidate the in-memory cart cache for the current user.
- * Call this after any cart write so the next fetchCart() re-reads Firestore.
- */
 export function bustCartCache() {
   const user = auth.currentUser
   if (user) _cartCache.delete(user.uid)
 }
 
-/**
- * Check if a specific productId is already in the user's cart.
- * Uses the cache — no extra Firestore read if cart was already fetched.
- * @param {string} productId
- * @returns {Promise<boolean>}
- */
 export async function isProductInCart(productId) {
   const items = await fetchCart()
   return items.some(i => i.productId === productId)
 }
 
-/**
- * Add a product to the current user's cart.
- * Throws 'NOT_LOGGED_IN' if the user is not authenticated.
- * @param {Product} product
- * @param {number}  finalPrice  — discounted or regular price
- * @returns {Promise<void>}
- */
 export async function addProductToCart(product, finalPrice) {
   const user = auth.currentUser
   if (!user) throw new Error('NOT_LOGGED_IN')
@@ -279,18 +165,45 @@ export async function addProductToCart(product, finalPrice) {
   bustCartCache()
 }
 
-/**
- * Replace the entire items array in the user's cart.
- * Used by cartview for quantity changes and removals.
- * @param {CartItem[]} updatedItems
- * @returns {Promise<void>}
- */
 export async function saveCartItems(updatedItems) {
   const user = auth.currentUser
   if (!user) return
   const cartRef = doc(db, 'carts', user.uid)
   await setDoc(cartRef, { items: updatedItems }, { merge: true })
   bustCartCache()
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// USERS / AUTH
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function fetchUserRole() {
+  const user = auth.currentUser
+  if (!user) return 'user'
+
+  if (_userRoleCache.has(user.uid)) {
+    return _userRoleCache.get(user.uid)
+  }
+
+  try {
+    const snap = await getDoc(doc(db, 'users', user.uid))
+    const role = snap.exists() ? (snap.data().role ?? 'user').trim().toLowerCase() : 'user'
+    _userRoleCache.set(user.uid, role)
+    return role
+  } catch (e) {
+    console.error('fetchUserRole error:', e)
+    return 'user'
+  }
+}
+
+export const fetchAllUsersFromDb = async () => {
+  try {
+    const snap = await getDocs(collection(db, 'users'))
+    return snap.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+  } catch (error) {
+    console.error("Critical failure during users mapping sync processing:", error)
+    throw error
+  }
 }
 
 export const updateUserRoleInDb = async (userId, newRole) => {
@@ -303,61 +216,10 @@ export const updateUserRoleInDb = async (userId, newRole) => {
   }
 }
 
-
-// ─────────────────────────────────────────────────────────────────────────────
-// USERS / AUTH
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Fetch the current user's role from Firestore.
- * Result is cached so only one read happens per session.
- * @returns {Promise<'superadmin' | 'admin' | 'user'>}
- */
-export async function fetchUserRole() {
-  const user = auth.currentUser
-  if (!user) return 'user'
-
-  if (_userRoleCache.has(user.uid)) {
-    return _userRoleCache.get(user.uid)
-  }
-
-  try {
-    const snap = await getDoc(doc(db, 'users', user.uid))
-    const role = snap.exists()
-      ? (snap.data().role ?? 'user').trim().toLowerCase()
-      : 'user'
-    _userRoleCache.set(user.uid, role)
-    return role
-  } catch (e) {
-    console.error('fetchUserRole error:', e)
-    return 'user'
-  }
-}
-
-export const fetchAllUsersFromDb = async () => {
-  try {
-    const snap = await getDocs(collection(db, 'users'))
-    return snap.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }))
-  } catch (error) {
-    console.error("Critical failure during users mapping sync processing:", error)
-    throw error
-  }
-}
-
-
-
-/** @returns {import('firebase/auth').User | null} */
 export function getCurrentUser() {
   return auth.currentUser
 }
 
-/**
- * Sign the current user out and clear all session caches.
- * @returns {Promise<void>}
- */
 export async function logoutUser() {
   _activeProductsCache = null
   _productCache.clear()
@@ -367,39 +229,36 @@ export async function logoutUser() {
   await signOut(auth)
 }
 
+export const createUserDocument = async (userData) => {
+  await setDoc(doc(db, 'users', userData.uid), { ...userData, createdAt: new Date() }, { merge: true })
+}
+
+export const dispatchPasswordResetToken = async (clientEmail) => {
+  if (!clientEmail || !clientEmail.trim()) throw new Error('EMAIL_REQUIRED')
+  try {
+    await sendPasswordResetEmail(auth, clientEmail.trim())
+  } catch (error) {
+    console.error('Database Layer — Reset Link Transmission Failure:', error.code)
+    throw error
+  }
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
-// product reviews — READ & WRITE
+// PRODUCT REVIEWS
 // ─────────────────────────────────────────────────────────────────────────────
 
-
-
-/**
- * Fetches all matching review snapshots for a specific product item
- * @param {string} productId 
- * @returns {Promise<Array>} List of review data blueprints
- */
 export const fetchProductReviews = async (productId) => {
   if (!productId) return []
   try {
     const q = query(collection(db, 'reviews'), where('productId', '==', productId))
     const snap = await getDocs(q)
-    return snap.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }))
+    return snap.docs.map(doc => ({ id: doc.id, ...doc.data() }))
   } catch (error) {
     console.error("Error pulling product reviews matrix:", error)
     return []
   }
 }
 
-/**
- * Submits a new customer review snapshot to Firestore
- * @param {string} productId 
- * @param {number} rating 
- * @param {string} comment 
- */
 export const addProductReview = async (productId, rating, comment) => {
   const currentUser = auth.currentUser
   if (!currentUser) throw new Error('NOT_LOGGED_IN')
@@ -419,73 +278,18 @@ export const addProductReview = async (productId, rating, comment) => {
   }
 }
 
-
-
-// ─────────────────────────────────────────────────────────────────────────────
-// USER DOCUMENT CREATION
-// Called from userAuth.js after a new user registers or logs in with Google.
-// Creates/updates a Firestore document for the user with their basic info.
-// This is separate from the auth state and allows us to store additional
-// profile info (like role) and query users by email if needed.
-// ─────────────────────────────────────────────────────────────────────────────
-
-export const createUserDocument = async (userData) => {
-
-  await setDoc(
-    doc(db, 'users', userData.uid),
-    {
-      ...userData,
-      createdAt: new Date()
-    },
-    { merge: true }
-  )
-}
-
-
-// ─────────────────────────────────────────────────────────────────────────────
-// PASSWORD RESET
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Dispatches a single-use cryptographic password reset token link to a user's email address.
- * @param {string} clientEmail - The target email address provided by the user.
- * @returns {Promise<void>} Resolves when the email has been successfully transmitted.
- */
-export const dispatchPasswordResetToken = async (clientEmail) => {
-  if (!clientEmail || !clientEmail.trim()) {
-    throw new Error('EMAIL_REQUIRED')
-  }
-  try {
-    // Core database layer handshake execution node
-    await sendPasswordResetEmail(auth, clientEmail.trim())
-  } catch (error) {
-    console.error('Database Layer — Reset Link Transmission Failure:', error.code)
-    throw error
-  }
-}
-
-
 // ─────────────────────────────────────────────────────────────────────────────
 // SEMANTIC URL SLUG RESOLUTION
 // ─────────────────────────────────────────────────────────────────────────────
 
-
-
-/**
- * Resolves a semantic URL name slug back to its live Firestore product document.
- * @param {string} slug - The lowercase text string from the URL router parameters.
- * @returns {Promise<object|null>} Matches data payload or returns null.
- */
 export const fetchProductBySlug = async (slug) => {
   if (!slug) return null
   try {
-    // 1. Check our active local memory caches first to save read costs
     if (_activeProductsCache) {
       const match = _activeProductsCache.find(p => p.name?.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '') === slug)
       if (match) return match
     }
     
-    // 2. Fallback to cold database query execution track if cache missed
     const q = query(collection(db, 'products'), where('isActive', '==', true))
     const snap = await getDocs(q)
     const allActive = snap.docs.map(d => ({ id: d.id, ...d.data() }))
@@ -498,19 +302,10 @@ export const fetchProductBySlug = async (slug) => {
   }
 }
 
-
 // ─────────────────────────────────────────────────────────────────────────────
 // USER ADDRESS MANAGEMENT
 // ─────────────────────────────────────────────────────────────────────────────
 
-
-
-import { arrayUnion } from 'firebase/firestore' // Ensure arrayUnion is in your firestore imports at the top
-
-/**
- * Appends a new delivery address structure to the authenticated user's account array block.
- * @param {object} addressData - Validated address input containing label, phone, street, pincode.
- */
 export const addNewUserAddress = async (addressData) => {
   const user = auth.currentUser
   if (!user) throw new Error('NOT_LOGGED_IN')
@@ -522,17 +317,53 @@ export const addNewUserAddress = async (addressData) => {
     isVerified: true
   }
 
-  // Atomically pushes map item into the users directory array structure
-  await setDoc(userRef, {
-    addresses: arrayUnion(uniqueAddressPayload)
-  }, { merge: true })
+  await setDoc(userRef, { addresses: arrayUnion(uniqueAddressPayload) }, { merge: true })
 }
 
-/**
- * Commits a brand-new finalized product order batch manifest down to Firestore.
- * @param {object} orderPayload - The complete order details including items, address, and amount.
- * @returns {Promise<string>} The newly generated Firestore Document tracking ID string.
- */
+export const removeUserAddressFromDb = async (addressId) => {
+  const user = auth.currentUser
+  if (!user) throw new Error('NOT_LOGGED_IN')
+  
+  const userRef = doc(db, 'users', user.uid)
+  try {
+    const snap = await getDoc(userRef)
+    if (snap.exists()) {
+      const currentAddresses = snap.data().addresses || []
+      const filteredAddresses = currentAddresses.filter(a => a.id !== addressId)
+      await updateDoc(userRef, { addresses: filteredAddresses })
+    }
+  } catch (error) {
+    console.error("Address deletion run aborted:", error)
+    throw error
+  }
+}
+
+export const modifyUserAddressInDb = async (addressId, updatedFields) => {
+  const user = auth.currentUser
+  if (!user) throw new Error('NOT_LOGGED_IN')
+  
+  const userRef = doc(db, 'users', user.uid)
+  try {
+    const snap = await getDoc(userRef)
+    if (snap.exists()) {
+      const addresses = snap.data().addresses || []
+      const idx = addresses.findIndex(a => a.id === addressId)
+      if (idx !== -1) {
+        addresses[idx] = { ...addresses[idx], ...updatedFields }
+        await updateDoc(userRef, { addresses })
+      }
+    }
+  } catch (error) {
+    console.error("Address mutation run aborted:", error)
+    throw error
+  }
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🚀 ORDER MANIFEST CREATION (UPDATED WITH COUPON INCREMENT)
+// ─────────────────────────────────────────────────────────────────────────────
+
 export const createCustomerOrderDocument = async (orderPayload) => {
   const user = auth.currentUser
   if (!user) throw new Error('NOT_LOGGED_IN')
@@ -546,12 +377,125 @@ export const createCustomerOrderDocument = async (orderPayload) => {
       createdAt: serverTimestamp()
     })
     
-    // Clear out user's cart bucket array immediately upon successful purchase path handoff
+    // Clear out user's cart bucket array immediately upon successful purchase
     await setDoc(doc(db, 'carts', user.uid), { items: [] }, { merge: true })
+
+    // ✨ NEW: If a coupon was used, increment its global usage count in the database
+    if (orderPayload.couponCode) {
+      try {
+        const couponRef = doc(db, 'coupons', orderPayload.couponCode.toUpperCase())
+        await updateDoc(couponRef, { usageCount: increment(1) })
+      } catch (couponErr) {
+        console.warn('Database Layer — Failed to increment coupon usage count:', couponErr)
+      }
+    }
     
     return orderRef.id
   } catch (error) {
-    console.error("Failed executing order transaction registry block:", error)
+    console.error("Database Layer — Failed executing order document creation block:", error)
+    throw error
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ADMIN COMMUNICATION & CONFIG LOGS (UPDATED WITH USAGE LIMITS)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const fetchCoupons = async () => {
+  try {
+    const snap = await getDocs(collection(db, 'coupons'))
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }))
+  } catch (error) {
+    console.error('Database Layer — Failed pulling coupons matrix:', error)
+    return []
+  }
+}
+
+export const saveCoupons = async (couponList) => {
+  try {
+    for (const coupon of couponList) {
+      if (!coupon.code) continue
+      const docRef = doc(db, 'coupons', coupon.code.toUpperCase())
+      await setDoc(docRef, {
+        code: coupon.code.toUpperCase(),
+        discount: Number(coupon.discount) || 0,
+        type: coupon.type || 'percent',
+        minOrderAmount: Number(coupon.minOrderAmount) || 0,
+        minItems: Number(coupon.minItems) || 0,
+        expiresAt: coupon.expiresAt || null,
+        maxUses: Number(coupon.maxUses) || 0, // ✨ NEW: Stores the maximum usage limit
+        usageCount: Number(coupon.usageCount) || 0, // ✨ NEW: Tracks how many times it was used
+        active: coupon.active ?? true,
+        updatedAt: serverTimestamp()
+      }, { merge: true })
+    }
+  } catch (error) {
+    console.error('Database Layer — Coupon serialization runtime error:', error)
+    throw error
+  }
+}
+
+
+export const setCodStatus = async (statusActive) => {
+  try {
+    const configRef = doc(db, 'systemConfig', 'gateways')
+    await setDoc(configRef, { isCodActive: !!statusActive }, { merge: true })
+  } catch (error) {
+    console.error('Database Layer — Gateway toggling runtime error:', error)
+    throw error
+  }
+}
+
+export const sendOrderMessage = async (orderId, textVal, roleType) => {
+  if (!orderId || !textVal.trim()) return
+  try {
+    const orderRef = doc(db, 'orders', orderId)
+    const orderSnap = await getDoc(orderRef)
+    
+    let existingMessages = []
+    if (orderSnap.exists()) {
+      existingMessages = orderSnap.data().messages || []
+    }
+
+    const newMessagePayload = {
+      senderId: roleType === 'admin' ? 'admin_node' : (auth.currentUser?.uid || 'anonymous'),
+      senderName: roleType === 'admin' ? 'Administration' : (auth.currentUser?.displayName || 'Buyer'),
+      senderRole: roleType,
+      text: textVal.trim(),
+      sentAt: Date.now()
+    }
+
+    await updateDoc(orderRef, {
+      messages: [...existingMessages, newMessagePayload]
+    })
+  } catch (error) {
+    console.error('Database Layer — Chat transmission exception dropped:', error)
+    throw error
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CUSTOMER SUPPORT CHAT SYSTEM
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Send a message to a specific user's support thread */
+export const sendSupportMessage = async (targetUserId, textVal, roleType) => {
+  if (!textVal.trim() || !targetUserId) return
+  try {
+    const chatRef = doc(db, 'supportChats', targetUserId)
+    const newMessage = {
+      text: textVal.trim(),
+      role: roleType, // 'admin' or 'user'
+      timestamp: Date.now()
+    }
+    // setDoc with merge creates the doc if it doesn't exist, or updates it if it does
+    await setDoc(chatRef, {
+      userName: auth.currentUser?.displayName || 'Pahari User',
+      lastUpdated: serverTimestamp(),
+      messages: arrayUnion(newMessage)
+    }, { merge: true })
+  } catch (error) {
+    console.error("Support Chat Error:", error)
     throw error
   }
 }

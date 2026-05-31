@@ -1,36 +1,51 @@
 <script setup>
 /**
  * cartview.vue — Premium Client Basket Hub Console
- * Features: High-contrast split console layout, custom item instructions, and regional voucher validation.
+ * Features: Dynamic live voucher validation pulled from Firestore and real-time ledger accounting.
  */
 import { ref, computed, onMounted }  from 'vue'
 import { db, auth }                  from '../firebase.js'
 import { onAuthStateChanged }        from 'firebase/auth'
 import { doc, onSnapshot }           from 'firebase/firestore'
-import { saveCartItems }             from './db.js'
+import { saveCartItems, fetchCoupons } from './db.js'
 
 defineOptions({ name: 'CartView' })
 
 const cartItems = ref([]), loading = ref(true), currentUser = ref(null)
 const promoCode = ref(''), promoApplied = ref(false), promoError = ref('')
+const activeCoupons = ref([]), appliedCoupon = ref(null)
 
 const SHIPPING_FEE = 60, FREE_SHIPPING_THRESHOLD = 499
 
 onMounted(() => {
-  onAuthStateChanged(auth, (user) => {
+  onAuthStateChanged(auth, async (user) => {
     currentUser.value = user
     if (user) {
       onSnapshot(doc(db, 'carts', user.uid), (snap) => {
         cartItems.value = snap.exists() ? (snap.data().items ?? []) : []
         loading.value = false
       })
+      // Fetch active dynamic coupons established by the admin terminal
+      try {
+        activeCoupons.value = await fetchCoupons()
+      } catch (err) { console.warn("Failed retrieving dynamic promotion matrices.") }
     } else { loading.value = false }
   })
 })
 
 // ── COMPUTED PROCESSING CALCULATIONS ──
 const subtotal = computed(() => cartItems.value.reduce((s, i) => s + i.price * i.quantity, 0))
-const discountAmount = computed(() => promoApplied.value ? Math.round(subtotal.value * 0.1) : 0) // 10% Local Crop Discount
+const totalItemCount = computed(() => cartItems.value.reduce((s, i) => s + i.quantity, 0))
+
+// Dynamically calculates flat vs percent deduction based on verified voucher state
+const discountAmount = computed(() => {
+  if (!promoApplied.value || !appliedCoupon.value) return 0
+  if (appliedCoupon.value.type === 'percent') {
+    return Math.round(subtotal.value * (appliedCoupon.value.discount / 100))
+  }
+  return Math.min(subtotal.value, appliedCoupon.value.discount)
+})
+
 const shippingCost = computed(() => subtotal.value >= FREE_SHIPPING_THRESHOLD || subtotal.value === 0 ? 0 : SHIPPING_FEE)
 const grandTotal = computed(() => Math.max(subtotal.value - discountAmount.value + shippingCost.value, 0))
 const progressToFree = computed(() => Math.min((subtotal.value / FREE_SHIPPING_THRESHOLD) * 100, 100))
@@ -59,21 +74,48 @@ const decreaseQty = (idx) => {
 const removeItem = (idx) => pushUpdate(cartItems.value.filter((_, i) => i !== idx))
 const clearEntireCart = () => { if (confirm('Empty your entire mountain basket?')) pushUpdate([]) }
 
-// 📝 NEW: LOCAL HARVEST ITEM BATCH NOTES SYNC ENGINE
 const updateItemNote = (idx, noteText) => {
   const updated = [...cartItems.value]
   updated[idx] = { ...updated[idx], note: noteText }
   pushUpdate(updated)
 }
 
-// 🏷️ NEW: REGIONAL PROMOTION VOUCHER INTERFACE VALIDATION
+// 🏷️ DYNAMIC REGIONAL PROMOTION VOUCHER INTERFACE VALIDATION
 const applyVoucher = () => {
-  promoError.value = ''; promoApplied.value = false
-  if (promoCode.value.trim().toUpperCase() === 'PAHAD10') {
-    promoApplied.value = true
-  } else {
-    promoError.value = "Invalid or expired mountain batch voucher."
+  promoError.value = ''; promoApplied.value = false; appliedCoupon.value = null
+  const code = promoCode.value.trim().toUpperCase()
+  
+  const verifiedCoupon = activeCoupons.value.find(c => c.code === code && c.active)
+
+  if (!verifiedCoupon) {
+    promoError.value = "Invalid or inactive mountain batch voucher."
+    return
   }
+  if (verifiedCoupon.expiresAt && Date.now() > verifiedCoupon.expiresAt) {
+    promoError.value = "This promotion window has expired."
+    return
+  }
+  if (subtotal.value < verifiedCoupon.minOrderAmount) {
+    promoError.value = `Add ₹${verifiedCoupon.minOrderAmount - subtotal.value} more to unlock this code.`
+    return
+  }
+  if (totalItemCount.value < verifiedCoupon.minItems) {
+    promoError.value = `You need at least ${verifiedCoupon.minItems} items allocated to use this voucher.`
+    return
+  }
+
+  appliedCoupon.value = verifiedCoupon
+  promoApplied.value = true
+  
+  // Persist calculated discount to session storage for seamless handoff to checkout.vue
+  window.sessionStorage.setItem('active_promo_discount', discountAmount.value)
+  window.sessionStorage.setItem('active_promo_code', verifiedCoupon.code)
+}
+
+const clearVoucher = () => {
+  promoCode.value = ''; promoApplied.value = false; appliedCoupon.value = null; promoError.value = ''
+  window.sessionStorage.removeItem('active_promo_discount')
+  window.sessionStorage.removeItem('active_promo_code')
 }
 </script>
 
@@ -86,13 +128,11 @@ const applyVoucher = () => {
         <p v-if="cartItems.length > 0">{{ cartItems.length }} pure high-altitude provision selection{{ cartItems.length > 1 ? 's' : '' }} reserved.</p>
       </header>
 
-      <!-- ⏳ STATE A: VERIFYING PROTOCOLS -->
       <div v-if="loading" class="cart-state-card">
         <div class="spinner"></div>
         <p>Assembling credentials & secure cloud basket lines…</p>
       </div>
 
-      <!-- 🔒 STATE B: ANONYMOUS ACCOUNT PROTECTION -->
       <div v-else-if="!currentUser" class="cart-state-card isolated-auth">
         <span class="state-glyph">🔒</span>
         <h3>Authorization Required</h3>
@@ -100,7 +140,6 @@ const applyVoucher = () => {
         <router-link to="/login" class="shop-btn">Go to Login</router-link>
       </div>
 
-      <!-- 🍯 STATE C: VACANT PROVISION SHEET -->
       <div v-else-if="cartItems.length === 0" class="cart-state-card isolated-auth">
         <span class="state-glyph">🍯</span>
         <h3>Aapka basket khali hai!</h3>
@@ -108,20 +147,15 @@ const applyVoucher = () => {
         <router-link to="/" class="shop-btn">Browse Products</router-link>
       </div>
 
-      <!-- 🛒 STATE D: ACTIVE PROVISION LAYOUT SPLIT -->
       <div v-else class="cart-split-layout fade-in">
-
-        <!-- LEFT PANE: BASKET COMPILATION ROWS -->
         <main class="cart-main-list">
           
-          <!-- Shipping Tracker Panel -->
           <div class="shipping-tracker-card">
             <p v-if="subtotal < FREE_SHIPPING_THRESHOLD">Add <strong>₹{{ amountNeeded }}</strong> more to unlock <strong>FREE Shipping!</strong></p>
             <p v-else>🎉 Mubarak ho! You have unlocked <strong>Free Mountain Delivery!</strong></p>
             <div class="progress-bar-container"><div class="progress-fill" :style="{ width: progressToFree + '%' }"></div></div>
           </div>
 
-          <!-- Product Item Cards -->
           <div v-for="(item, idx) in cartItems" :key="item.productId" class="cart-item-row">
             <div class="item-thumb-box"><span class="item-emoji">{{ item.emoji || '📦' }}</span></div>
             
@@ -135,7 +169,6 @@ const applyVoucher = () => {
                 <button class="qty-btn" @click="increaseQty(idx)">+</button>
               </div>
 
-              <!-- 📝 NEW FUNCTION: LIVE PACKAGING INSTRUCTION BAR -->
               <div class="item-instruction-wrapper">
                 <input 
                   :value="item.note || ''" 
@@ -156,16 +189,15 @@ const applyVoucher = () => {
           <button class="clear-basket-link" @click="clearEntireCart">❌ Empty My Entire Basket</button>
         </main>
 
-        <!-- RIGHT PANE: TRANSACTION CONSOLE SIDEBAR -->
         <aside class="cart-summary-sidebar">
           <h3>Order Summary</h3>
           <div class="summary-divider"></div>
           
           <div class="summary-line"><span>Basket Subtotal</span><span>₹{{ subtotal }}</span></div>
           
-          <!-- 🏷️ NEW FUNCTION: INLINE COUPON CALCULATION STRIP -->
           <div v-if="promoApplied" class="summary-line text-green">
-            <span>Voucher Discount (10%)</span><span>-₹{{ discountAmount }}</span>
+            <span>{{ appliedCoupon.code }} ({{ appliedCoupon.type === 'percent' ? appliedCoupon.discount + '%' : '₹' + appliedCoupon.discount }})</span>
+            <span>-₹{{ discountAmount }}</span>
           </div>
 
           <div class="summary-line">
@@ -174,14 +206,14 @@ const applyVoucher = () => {
             <span v-else>₹{{ shippingCost }}</span>
           </div>
 
-          <!-- 🏷️ NEW FUNCTION: PROMO ENTRY SYSTEM FIELD -->
           <div class="promo-coupon-box">
             <div class="promo-input-row">
               <input v-model="promoCode" placeholder="Enter Code (e.g., PAHAD10)" :disabled="promoApplied" class="promo-text-input" />
-              <button @click="applyVoucher" :disabled="promoApplied" class="promo-apply-btn">Apply</button>
+              <button v-if="!promoApplied" @click="applyVoucher" class="promo-apply-btn">Apply</button>
+              <button v-else @click="clearVoucher" class="promo-apply-btn clear-promo">Remove</button>
             </div>
             <p v-if="promoError" class="promo-msg-error">{{ promoError }}</p>
-            <p v-if="promoApplied" class="promo-msg-success">✓ 10% Local Crop Discount applied.</p>
+            <p v-if="promoApplied" class="promo-msg-success">✓ Target discount matrix mapped and active.</p>
           </div>
 
           <div class="summary-divider"></div>
@@ -233,7 +265,6 @@ const applyVoucher = () => {
 .qty-btn:hover { background: #f3f4f6; }
 .qty-display-text { width: 36px; text-align: center; font-size: .95rem; font-weight: 800; color: #111827; user-select: none; }
 
-/* 📝 ITEM PACKAGING NOTE INPUT FIELD STYLES */
 .item-instruction-wrapper { margin-top: 12px; width: 100%; max-width: 380px; }
 .item-note-input { width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.85rem; font-family: inherit; color: #374151; outline: none; background-color: #f9fafb; box-sizing: border-box; }
 .item-note-input:focus { border-color: #16a34a; background-color: #ffffff; }
@@ -253,13 +284,14 @@ const applyVoucher = () => {
 .text-green { color: #16a34a !important; font-weight: 700; }
 .free-shipping-tag { color: #16a34a; font-weight: 800; background: #f0fdf4; padding: 2px 8px; border-radius: 4px; font-size: .78rem; border: 1px solid #bbf7d0; }
 
-/* 🏷️ PROMO CONTAINER DESIGN STYLES */
 .promo-coupon-box { margin: 20px 0 10px; padding: 12px; background-color: #f9fafb; border: 1px dashed #cbd5e1; border-radius: 8px; }
 .promo-input-row { display: flex; gap: 8px; }
 .promo-text-input { flex: 1; padding: 8px 12px; border: 2px solid #cbd5e1; border-radius: 6px; font-family: inherit; font-size: 0.85rem; outline: none; }
 .promo-text-input:focus { border-color: #111827; }
 .promo-apply-btn { padding: 8px 16px; background-color: #111827; color: #FAF6F0; border: none; border-radius: 6px; font-weight: 700; font-size: 0.82rem; cursor: pointer; text-transform: uppercase; }
 .promo-apply-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.clear-promo { background-color: #dc2626; }
+.clear-promo:hover { background-color: #b91c1c; }
 .promo-msg-error { margin: 6px 0 0; font-size: 0.78rem; color: #dc2626; font-weight: 600; }
 .promo-msg-success { margin: 6px 0 0; font-size: 0.78rem; color: #16a34a; font-weight: 700; }
 
