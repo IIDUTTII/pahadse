@@ -28,6 +28,7 @@ defineOptions({ name: 'Footer' })
         <router-link to="/contact">Contact</router-link>
         <router-link to="/privacy">Privacy Policy</router-link>
         <router-link to="/terms">Terms of Use</router-link>
+        <router-link to="/return">Return & Refund Policy</router-link>
       </div>
 
       <div class="footer-col">

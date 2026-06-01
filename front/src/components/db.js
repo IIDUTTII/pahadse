@@ -436,6 +436,26 @@ export const saveCoupons = async (couponList) => {
 }
 
 
+
+// ─────────────────────────────────────────────────────────────────────────────
+// COUPON DELETION HANDLER
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Permanently deletes a specific coupon document from the Firestore database.
+ * @param {string} couponCode - The exact uppercase document ID of the coupon.
+ */
+export const deleteCouponFromDb = async (couponCode) => {
+  if (!couponCode) return
+  try {
+    const docRef = doc(db, 'coupons', couponCode.toUpperCase())
+    await deleteDoc(docRef)
+  } catch (error) {
+    console.error('Database Layer — Failed to delete coupon document:', error)
+    throw error
+  }
+}
+
 export const setCodStatus = async (statusActive) => {
   try {
     const configRef = doc(db, 'systemConfig', 'gateways')

@@ -40,10 +40,9 @@ function closeMobileMenu()  { mobileMenuOpen.value = false }
     <nav class="tb-center desktop-nav">
       <router-link to="/">Home</router-link>
       <router-link v-if="isAdmin || isSuperAdmin" to="/admin">Admin</router-link>
-      <router-link v-if="isAdmin || isSuperAdmin" to="/cart">Admin Cart</router-link>
       <router-link v-if="currentUser"to="/cart">Cart</router-link>
       <router-link v-if="currentUser" to="/user">Profile</router-link>
-      <router-link to="/policies">Policies</router-link>
+      <router-link to="/privacy">Privacy</router-link>
       <router-link to="/contact">Contact</router-link>
     </nav>
 
