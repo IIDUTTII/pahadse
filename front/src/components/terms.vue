@@ -233,7 +233,7 @@ defineOptions({
 /* Mobile Responsiveness */
 @media (max-width: 768px) {
   .legal-wrapper {
-    padding: 30px 10px;
+    padding: calc(60px + 40px) 4% 80px;
   }
   
   .legal-document {

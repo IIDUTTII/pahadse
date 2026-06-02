@@ -123,12 +123,14 @@ defineOptions({
   </div>
 </template>
 
+
+
 <style scoped>
 /* Clean document style – matching your other policy pages */
 .legal-wrapper {
   background-color: #fcfcfc;
   min-height: 100vh;
-  padding: 90px 20px 60px 20px;
+  padding: calc(60px + 40px) 4% 80px;
   display: flex;
   justify-content: center;
   font-family: Arial, Helvetica, sans-serif;
@@ -210,7 +212,7 @@ defineOptions({
 /* Mobile Responsiveness */
 @media (max-width: 768px) {
   .legal-wrapper {
-    padding: 30px 10px;
+    padding: calc(60px + 40px) 4% 80px;
   }
   
   .legal-document {

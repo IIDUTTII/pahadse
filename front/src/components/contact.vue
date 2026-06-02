@@ -57,7 +57,7 @@ const handleContactSubmit = async () => {
       
       <!-- Header -->
       <header class="contact-header">
-        <h1>Get in Touch</h1>
+        <h1>Get in Touch Life</h1>
         <p>Whether you have a question about our mountain provisions, bulk orders, or your recent delivery, we are here to help.</p>
         <div class="divider"></div>
       </header>

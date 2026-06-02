@@ -6,7 +6,6 @@ defineOptions({ name: 'Footer' })
 <template>
   <footer class="footer">
     <div class="footer-inner">
-
       <div class="footer-brand">
         <img src="../assets/logo.png" alt="PahadSe" class="foot-logo" />
         <span class="foot-name">PahadSe</span>
@@ -38,56 +37,119 @@ defineOptions({ name: 'Footer' })
         <router-link to="/user">My Profile</router-link>
         <router-link to="/orders">My Orders</router-link>
       </div>
-
     </div>
 
     <div class="footer-bottom">
       <span>© {{ year }} PahadSe. All rights reserved.</span>
-      <span class="made-with">Made with 🏔️ in Himachal Pradesh</span>
+      <span class="made-with">🏔️ Made with care in Himachal Pradesh</span>
     </div>
   </footer>
 </template>
 
 <style scoped>
-@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@700&family=DM+Sans:wght@400;500&display=swap');
-
+/* 🌿 PREMIUM GREEN/DARK FOOTER */
 .footer {
-  background: #2C3520;
-  color: #D6D8C8;
-  font-family: 'DM Sans', sans-serif;
+  background: #0F2A1F;
+  color: #D9E0D4;
+  font-family: 'DM Sans', system-ui, sans-serif;
   margin-top: 60px;
   padding-bottom: 20px;
 }
-@media (max-width: 767px) { .footer { padding-bottom: 80px; } }
 
 .footer-inner {
-  max-width: 1100px; margin: 0 auto;
+  max-width: 1100px;
+  margin: 0 auto;
   padding: 48px 28px 32px;
-  display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 40px;
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr;
+  gap: 40px;
 }
-@media (max-width: 900px) { .footer-inner { grid-template-columns: 1fr 1fr; gap: 28px; } }
-@media (max-width: 500px) { .footer-inner { grid-template-columns: 1fr; gap: 24px; padding: 36px 20px 24px; } }
 
-.footer-brand { display: flex; flex-direction: column; gap: 8px; }
-.foot-logo    { width: 38px; height: 38px; object-fit: contain; filter: brightness(1.2); }
-.foot-name    { font-family: 'Cormorant Garamond', serif; font-size: 19px; font-weight: 700; color: #9AAD72; }
-.foot-tagline { font-size: 13px; color: rgba(214,216,200,0.50); line-height: 1.6; margin: 0; }
+.footer-brand {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.foot-logo {
+  width: 38px;
+  height: 38px;
+  object-fit: contain;
+  filter: brightness(1.1);
+}
+.foot-name {
+  font-family: 'Playfair Display', serif;
+  font-size: 20px;
+  font-weight: 700;
+  color: #C9A96E;
+}
+.foot-tagline {
+  font-size: 13px;
+  color: rgba(217, 224, 212, 0.55);
+  line-height: 1.5;
+  margin: 0;
+}
 
-.footer-col  { display: flex; flex-direction: column; gap: 10px; }
-.col-title   { font-size: 10px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: #7A8C5A; margin-bottom: 4px; }
+.footer-col {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.col-title {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: #9CAF88;
+  margin-bottom: 4px;
+}
 .footer-col a {
-  text-decoration: none; color: rgba(214,216,200,0.60);
-  font-size: 13px; transition: color .2s;
+  text-decoration: none;
+  color: rgba(217, 224, 212, 0.55);
+  font-size: 13px;
+  transition: color 0.2s;
 }
-.footer-col a:hover { color: #9AAD72; }
+.footer-col a:hover {
+  color: #C9A96E;
+}
 
 .footer-bottom {
-  max-width: 1100px; margin: 0 auto;
-  padding: 16px 28px 0;
-  border-top: 1px solid rgba(214,216,200,0.10);
-  display: flex; align-items: center; justify-content: space-between;
-  font-size: 12px; color: rgba(214,216,200,0.35);
-  flex-wrap: wrap; gap: 8px;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 20px 28px 0;
+  border-top: 1px solid rgba(156, 175, 136, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: rgba(217, 224, 212, 0.4);
+  flex-wrap: wrap;
+  gap: 8px;
 }
-.made-with { color: rgba(214,216,200,0.38); }
+.made-with {
+  color: rgba(217, 224, 212, 0.42);
+  font-style: italic;
+}
+
+@media (max-width: 900px) {
+  .footer-inner {
+    grid-template-columns: 1fr 1fr;
+    gap: 28px;
+  }
+}
+@media (max-width: 500px) {
+  .footer-inner {
+    grid-template-columns: 1fr;
+    gap: 24px;
+    padding: 36px 20px 24px;
+  }
+  .footer-bottom {
+    flex-direction: column;
+    text-align: center;
+  }
+}
+@media (max-width: 767px) {
+  .footer {
+    padding-bottom: 80px;
+  }
+}
 </style>

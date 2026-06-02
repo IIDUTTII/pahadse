@@ -7,7 +7,8 @@ import { fetchUserRole, updateProduct, deleteProduct, logoutUser, fetchAllUsersF
 
 defineOptions({ name: 'Admin' })
 const router = useRouter()
-
+// add dashboard for non registred queryies from contact us form
+// add analytics dashboard with charts for sales, orders, user growth etc (maybe use chart.js or similar library) 
 const activeTab        = ref('products')
 const userRole         = ref('user')
 const searchText       = ref('')
