@@ -1,0 +1,25 @@
+# Python
+venv/
+front/venv/
+__pycache__/
+*.pyc
+
+# Node
+node_modules/
+front/node_modules/
+
+# Build output
+dist/
+front/dist/
+
+# VS Code
+.vscode/
+front/.vscode/
+
+# Secrets
+serviceAccountKey.json
+.env
+.env.*
+
+run.sh
+gen.py
