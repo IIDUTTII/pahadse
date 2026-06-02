@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.103.3",
+    "browser-image-compression": "^2.0.2",
     "firebase": "^12.13.0",
     "vue": "^3.5.32",
     "vue-router": "^5.0.4"
