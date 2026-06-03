@@ -103,7 +103,7 @@ const primaryImage = (p) => p.imageUrls?.find(u => u?.trim()) ?? null
     <!-- Bottom Navigation (mobile) -->
     <nav class="mobile-bottom-nav">
       <router-link to="/" class="mob-item"><span>🏠</span><span>Home</span></router-link>
-      <router-link to="/policies" class="mob-item"><span>🛍️</span><span>Shop</span></router-link>
+      <router-link to="/terms" class="mob-item"><span>🛍️</span><span>Terms</span></router-link>
       <router-link to="/cart" class="mob-item"><span>🛒</span><span>Cart</span></router-link>
       <router-link to="/user" class="mob-item"><span>👤</span><span>Profile</span></router-link>
     </nav>
