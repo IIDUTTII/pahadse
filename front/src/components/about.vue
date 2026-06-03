@@ -27,7 +27,7 @@ defineOptions({
         <div class="text-content">
           <h2>The Mountain Way of Life</h2>
           <p>The Himalayan region is known for its pristine environment, traditional lifestyles, and rich agricultural heritage. For us, the mountains are not just where we live—they are the very essence of who we are.</p>
-          <p>Daily life here is dictated by the rhythm of changing seasons, the flow of natural springs, and a profound connection to the land. In our households, ancient methods of preparing food are not just remembered; they are actively practiced. These traditions, passed down through generations, are the soul of every product we bring to your table.</p>
+          <p>Daily life here is dictated by the rhythm of changing seasons, the flow of natural springs, and a profound connection to the land. In our households, ancient methods of preparing food are not just remembered;  they are actively practiced. These traditions, passed down through generations, are the soul of every product we bring to your table.</p>
         </div>
         <div class="image-content">
           <img 
@@ -312,7 +312,7 @@ defineOptions({
   height: 2px;
   background-color: #cbd5e1;
   width: 100px;
-  margin: 60px auto;
+  margin:   60px auto;
 }
 
 /* ⭐ Promises Grid */
