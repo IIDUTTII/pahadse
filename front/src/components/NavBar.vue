@@ -71,8 +71,9 @@ function closeMobileMenu()  { mobileMenuOpen.value = false }
     <div v-if="mobileMenuOpen" class="mobile-menu" @click="closeMobileMenu">
       <router-link to="/">🏠 Home</router-link>
       <router-link v-if="isAdmin || isSuperAdmin" to="/admin">⚙️ Admin</router-link>
-      <router-link to="/policies">🛍️ Policies</router-link>
+      <router-link to="/terms">🛍️ Terms</router-link>
       <router-link to="/user">📖 Profile</router-link>
+      <router-link to="/about">📚 About</router-link>
       <router-link to="/contact">📞 Contact</router-link>
       <template v-if="!currentUser">
         <div class="menu-divider"></div>
@@ -85,7 +86,7 @@ function closeMobileMenu()  { mobileMenuOpen.value = false }
 
   <nav class="mobile-bottom-nav">
     <router-link to="/" class="mob-item"><span>🏠</span><span>Home</span></router-link>
-    <router-link to="/policies" class="mob-item"><span>🛍️</span><span>Shop</span></router-link>
+    <router-link to="/terms" class="mob-item"><span>🛍️</span><span>Terms</span></router-link>
     <router-link to="/cart" class="mob-item"><span>🛒</span><span>Cart</span></router-link>
     <router-link to="/user" class="mob-item"><span>👤</span><span>Profile</span></router-link>
   </nav>
