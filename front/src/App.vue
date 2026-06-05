@@ -23,38 +23,52 @@ import Footer from './components/Footer.vue'
   padding: 0;
 }
 
-/* ✅ CRITICAL FIX: Force consistent root font size */
-html {
+/* ✅ STRONGER FIX: Force root font size at highest level */
+:root, html {
   font-size: 16px !important;
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
 }
 
-body, #app {
+/* Ensure body inherits correctly */
+body {
   background: #F5EFE0;
   min-height: 100vh;
   overflow-x: hidden;
   width: 100%;
   font-family: 'DM Sans', sans-serif;
-  font-size: 16px;
+  font-size: 1rem !important;
 }
 
-/* Prevent any scaling issues */
+#app {
+  min-height: 100vh;
+  width: 100%;
+}
+
+/* Prevent any scaling issues on media */
 img, picture, video, canvas, svg {
   max-width: 100%;
   display: block;
 }
 
-/* Responsive font scaling (optional, keeps mobile readable) */
-@media (max-width: 768px) {
-  html {
+/* Tablet styles */
+@media (max-width: 768px) and (min-width: 481px) {
+  :root, html {
     font-size: 14px !important;
   }
 }
 
+/* Mobile styles */
 @media (max-width: 480px) {
-  html {
+  :root, html {
     font-size: 12px !important;
+  }
+}
+
+/* Desktop override for any window wider than 768px */
+@media (min-width: 769px) {
+  :root, html {
+    font-size: 16px !important;
   }
 }
 </style>

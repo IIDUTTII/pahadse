@@ -1,18 +1,40 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <!-- Multiple sizes for different devices -->
-    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
-    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
-    <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png" />
-    <link rel="icon" type="image/png" sizes="64x64" href="/favicon-64x64.png" />
-    <link rel="icon" type="image/png" sizes="128x128" href="/favicon-128x128.png" />
-    <!-- Fallback -->
-    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+
+    <!-- Browser Tab Icon -->
+    <link rel="icon" type="image/png" href="/favicon.png" />
+
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <style>
+      html {
+        font-size: 16px !important;
+      }
+
+      @media (max-width: 768px) {
+        html {
+          font-size: 14px !important;
+        }
+      }
+
+      @media (max-width: 480px) {
+        html {
+          font-size: 12px !important;
+        }
+      }
+
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+    </style>
+
     <title>PahadSe - Himalayan Goodness</title>
   </head>
+
   <body>
     <div id="app"></div>
     <script type="module" src="/src/main.js"></script>
