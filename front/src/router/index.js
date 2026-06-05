@@ -18,27 +18,39 @@ import Contact from '../components/contact.vue'
 import About from '../components/about.vue'
 
 const routes = [
-  { path: '/',                       component: Home          },
-  { path: '/login',                  component: Login         },
-  { path: '/register',               component: Register      },
-  { path: '/user',                   component: User          },
-  { path: '/privacy',               component: Privacy       },
-  { path: '/cart',                   component: Cart          },
-  { path: '/product/:id',            component: ProductDetail },  // 👈 new
-  { path: '/admin', component: Admin, meta: { requiresAdmin: true } },
+  { path: '/',                       component: Home,meta: { title: 'Home | PahadSe' }          },
+  { path: '/login',                  component: Login,meta: { title: 'Login | PahadSe' }         },
+  { path: '/register',               component: Register,meta: { title: 'Register | PahadSe' }      },
+  { path: '/user',                   component: User,meta: { title: 'User | PahadSe' }          },
+  { path: '/privacy',               component: Privacy,meta: { title: 'Privacy | PahadSe' }       },
+  { path: '/cart',                   component: Cart,meta: { title: 'Cart | PahadSe' }          },
+  { path: '/product/:id',            component: ProductDetail,meta: { title: 'Product | PahadSe' } },  // 👈 new
+  { path: '/admin', component: Admin, meta: { title: 'Admin | PahadSe', requiresAdmin: true } },
   { path: '/:pathMatch(.*)*', name: 'NotFound', component: NotFoundView },
-  { path: '/admin/product/:id', component: ProductForm, meta: { requiresAdmin: true } },
-  { path: '/checkout', component: checkout },
-  { path: '/terms', component: Terms },
-  { path: '/return', component: Return },
-  { path: '/contact', component: Contact },
-  { path: '/about', component: About }
+  { path: '/admin/product/:id', component: ProductForm, meta: { title: 'Edit Product | PahadSe', requiresAdmin: true } },
+  { path: '/checkout', component: checkout,meta: { title: 'Checkout | PahadSe' } },
+  { path: '/terms', component: Terms,meta: { title: 'Terms | PahadSe' } },
+  { path: '/return', component: Return,meta: { title: 'Return & Refund | PahadSe' } },
+  { path: '/contact', component: Contact,meta: { title: 'Contact | PahadSe' } },
+  { path: '/about', component: About,meta: { title: 'About | PahadSe' } }
 
 ]
 
 const router = createRouter({
   history: createWebHistory(),
   routes,
+  scrollBehavior(to, from, savedPosition) {
+    // If coming back via back/forward, restore position
+    if (savedPosition) {
+      return savedPosition
+    }
+    // If there's a hash (e.g., /page#section), scroll to it
+    if (to.hash) {
+      return { el: to.hash, behavior: 'smooth', top: 70 }
+    }
+    // Default: scroll to top
+    return { top: 0, left: 0, behavior: 'smooth' }
+  }
 })
 
 // ── Fixed: return value instead of next() — removes the deprecated warning
@@ -49,7 +61,7 @@ router.beforeEach(async (to, from) => {
     if (isAdmin.value || isSuperAdmin.value) {
       return true          // ✅ allow
     } else {
-      alert('maderchod tu admin nahi hai')
+      alert('app admin nahi ho')  // 🚫 block
       return '/'           // ✅ redirect — replaces next('/')
     }
   }
