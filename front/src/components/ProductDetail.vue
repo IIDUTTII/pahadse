@@ -218,9 +218,9 @@ async function handleReviewSubmit() {
 </template>
 
 <style scoped>
-.page { padding: 90px 2% 120px; font-family: 'Jost', sans-serif; min-height: 100vh; background-color: #FAF6F0; color: #111827; }
-.breadcrumb-container { max-width: 96%; margin: 0 auto 24px; }
-.back-link-action { background: none; border: none; color: #6b7280; font-weight: 700; font-size: 0.95rem; cursor: pointer; padding: 0; }
+.page { padding: 120px 2% 100px; font-family: 'Jost', sans-serif; min-height: 100vh; background-color: #FAF6F0; color: #111827; }
+.breadcrumb-container { max-width: 96%; margin: 0 auto 25px;display: flex; align-items: center; justify-content: center;}
+.back-link-action { background: none;margin-top: 50px; border: none; color: #6b7280;text-align: center; font-weight: 700; font-size: 0.95rem; cursor: pointer; padding: 0; }
 .back-link-action:hover { color: #16a34a; }
 .center-state { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 50vh; gap: 16px; }
 .spinner { width: 44px; height: 44px; border: 3px solid #e5e7eb; border-top-color: #16a34a; border-radius: 50%; animation: spin 0.85s linear infinite; }

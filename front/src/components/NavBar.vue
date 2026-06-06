@@ -1,16 +1,34 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
-import { auth }           from '../firebase.js'
+import { auth } from '../firebase.js'
 import { onAuthStateChanged } from 'firebase/auth'
 import { isAdmin, isSuperAdmin } from '../userAuth.js'
 
 defineOptions({ name: 'NavBar' })
 
-const currentUser  = ref(null)
+const currentUser = ref(null)
 const userInitials = ref('')
 let unsubscribeAuth = null
 
+// --- Navbar hide/show on scroll ---
+const showNavbar = ref(true)
+let lastScrollY = 0
+
+const handleScroll = () => {
+  const currentScrollY = window.scrollY
+  if (currentScrollY > lastScrollY && currentScrollY > 50) {
+    // Scrolling down & past 50px → hide
+    showNavbar.value = false
+  } else {
+    // Scrolling up → show
+    showNavbar.value = true
+  }
+  lastScrollY = currentScrollY
+}
+// ---------------------------------
+
 onMounted(() => {
+  // Auth listener
   unsubscribeAuth = onAuthStateChanged(auth, (user) => {
     currentUser.value = user
     if (user?.displayName) {
@@ -20,16 +38,26 @@ onMounted(() => {
       userInitials.value = user.email[0].toUpperCase()
     }
   })
+
+  // Scroll listener
+  window.addEventListener('scroll', handleScroll)
 })
-onUnmounted(() => { if (unsubscribeAuth) unsubscribeAuth() })
+
+onUnmounted(() => {
+  if (unsubscribeAuth) unsubscribeAuth()
+  window.removeEventListener('scroll', handleScroll)
+})
 
 const mobileMenuOpen = ref(false)
 function toggleMobileMenu() { mobileMenuOpen.value = !mobileMenuOpen.value }
-function closeMobileMenu()  { mobileMenuOpen.value = false }
+function closeMobileMenu() { mobileMenuOpen.value = false }
 </script>
 
 <template>
-  <header class="topbar">
+  <header
+    class="topbar"
+    :class="{ 'topbar-hidden': !showNavbar }"
+  >
     <div class="tb-left">
       <router-link to="/" class="logo-link">
         <img src="../assets/logo.png" alt="PahadSe" class="logo-img" />
@@ -90,12 +118,10 @@ function closeMobileMenu()  { mobileMenuOpen.value = false }
     <router-link to="/cart" class="mob-item"><span>🛒</span><span>Cart</span></router-link>
     <router-link to="/user" class="mob-item"><span>👤</span><span>Profile</span></router-link>
   </nav>
-
 </template>
 
-
-
 <style scoped>
+/* ========== YOUR ORIGINAL STYLES (exactly as you had them) ========== */
 @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800;900&family=DM+Sans:wght@400;500;600;700;800&display=swap');
 
 :root {
@@ -105,17 +131,25 @@ function closeMobileMenu()  { mobileMenuOpen.value = false }
 }
 
 .topbar {
-  position: fixed; top: 1.5%; left: 0; right: 0; z-index: 200;
+  position: fixed;
+  top: 1.5%;
+  left: 0;
+  right: 0;
+  z-index: 200;
   height: auto;
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 0 4px; background: transparent; pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 4px;
+  background: transparent;
+  pointer-events: none;
+  transition: transform 0.35s ease;
 }
 .topbar > * { pointer-events: all; }
+.topbar-hidden { transform: translateY(-150%); }
 
 .tb-left { display: flex; align-items: center; padding-left: 20px; }
 .logo-link { display: flex; align-items: center; gap: 10px; text-decoration: none; }
-
-/* Desktop logo – slightly bigger than the compact version */
 .logo-img { width: 62px; height: 62px; object-fit: contain; filter: drop-shadow(0 2px 5px rgba(0,0,0,0.1)); }
 .logo-text { 
   font-family: 'Playfair Display', serif; 
@@ -125,24 +159,20 @@ function closeMobileMenu()  { mobileMenuOpen.value = false }
   white-space: nowrap; 
 }
 
-/* Desktop nav pill – taller padding (but not huge) */
 .desktop-nav {
   display: flex; align-items: center; gap: 6px;
   background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(16px);
   border: 1px solid rgba(15, 42, 31, 0.15); 
   box-shadow: 0 6px 18px rgba(15, 42, 31, 0.08);
   border-radius: 999px; 
-  padding: 10px 18px;   /* increased from 4px 12px to make centre bar taller */
+  padding: 10px 18px;
 }
-
-/* Desktop nav links – slightly larger padding */
 .desktop-nav a {
   text-decoration: none; color: #475569; font-size: 15px; font-weight: 500;
   padding: 7.5px 18px; 
   border-radius: 999px;
   transition: all 0.2s ease; white-space: nowrap;
 }
-
 .desktop-nav a:hover,
 .desktop-nav a.router-link-active,
 .desktop-nav a.router-link-exact-active { 
@@ -152,10 +182,8 @@ function closeMobileMenu()  { mobileMenuOpen.value = false }
   box-shadow: 0 2px 8px rgba(15, 42, 31, 0.25) !important;
   transform: translateY(-1px);
 }
-
 @media (max-width: 900px) { .desktop-nav { display: none; } }
 
-/* Right section – matching height */
 .tb-right {
   display: flex; align-items: center; gap: 10px;
   background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(16px);
@@ -166,7 +194,6 @@ function closeMobileMenu()  { mobileMenuOpen.value = false }
   margin-right: 20px;
 }
 
-/* Desktop buttons – slightly taller */
 .btn-outline {
   border: 1.8px solid #0F2A1F !important; background: transparent; color: #0F2A1F !important;
   padding: 8px 20px; border-radius: 999px; font-size: 14px; font-weight: 700;
@@ -183,7 +210,6 @@ function closeMobileMenu()  { mobileMenuOpen.value = false }
 }
 .btn-fill:hover { background: #0b1f17 !important; border-color: #0b1f17 !important; transform: translateY(-1px); }
 
-/* User chip - desktop */
 .user-chip { display: flex; align-items: center; gap: 8px; text-decoration: none; color: #0F2A1F; font-size: 15px; font-weight: 600; padding: 3px 10px 3px 3px; border-radius: 999px; transition: background 0.2s; }
 .user-chip:hover { background: rgba(15, 42, 31, 0.05); }
 .avatar { width: 36px; height: 36px; border-radius: 50%; background: #D6D8C8; border: 2px solid #0F2A1F; overflow: hidden; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
@@ -191,7 +217,6 @@ function closeMobileMenu()  { mobileMenuOpen.value = false }
 .avatar-initials { font-size: 14px; font-weight: 800; color: #0F2A1F; }
 .user-name { white-space: nowrap; max-width: 110px; overflow: hidden; text-overflow: ellipsis; font-size: 14px; }
 
-/* Hamburger (desktop) */
 .hamburger {
   width: 34px; height: 34px; border-radius: 8px;
   border: 1.8px solid #0F2A1F; background: transparent; cursor: pointer;
@@ -207,28 +232,22 @@ function closeMobileMenu()  { mobileMenuOpen.value = false }
 .desktop-only { display: inline; }
 .mobile-only { display: none; }
 
-/* MOBILE STYLES – keep exactly as the compact version (same as before) */
 @media (max-width: 900px) {
   .desktop-only { display: none; }
   .mobile-only { display: flex; }
-  
-  /* Mobile logo – small (same as your compact version) */
   .logo-img { width: 50px; height: 50px; }
   .logo-text { font-size: 20px !important; font-weight: 800 !important; letter-spacing: -0.2px; }
-  
-  /* Mobile right section – compact */
   .tb-right { margin-right: 6px; padding: 7px 9px; gap: 4px; }
   .btn-outline { padding: 4px 12px; font-size: 12px; border-width: 2.0px !important; }
   .btn-fill { padding: 4px 12px; font-size: 12px; border-width: 1.2px !important; }
   .hamburger { width: 28px; height: 28px; border-width: 1.2px; }
   .avatar { width: 32px; height: 32px; }
   .avatar-initials { font-size: 12px; }
-  .user-name { display: none; } /* hide username on mobile to save space */
+  .user-name { display: none; }
 }
 @media (max-width: 500px) { .tb-left { padding-left: 3%; padding-top: 1%; } }
 @media (max-width: 400px) { .logo-text { font-size: 18px !important; } }
 
-/* Mobile Menu Panel (unchanged, already good) */
 .mobile-menu {
   position: fixed; top: 68px; right: 12px; width: 210px;
   background: rgba(255, 255, 255, 0.98); backdrop-filter: blur(16px);
@@ -250,7 +269,6 @@ function closeMobileMenu()  { mobileMenuOpen.value = false }
 .menu-slide-enter-active, .menu-slide-leave-active { transition: opacity .2s, transform .2s; }
 .menu-slide-enter-from, .menu-slide-leave-to { opacity: 0; transform: translateY(-8px) scale(.96); }
 
-/* Mobile Bottom Nav */
 .mobile-bottom-nav { display: none; position: fixed; bottom: 0; left: 0; right: 0; background: rgba(255, 255, 255, 0.96); backdrop-filter: blur(12px); border-top: 1px solid rgba(15, 42, 31, 0.12); padding: 8px 0; justify-content: space-around; z-index: 200; box-shadow: 0 -2px 12px rgba(15, 42, 31, 0.05); }
 @media (max-width: 900px) { .mobile-bottom-nav { display: flex; } }
 .mob-item { display: flex; flex-direction: column; align-items: center; gap: 2px; text-decoration: none; color: #64748b; font-size: 10px; padding: 4px 12px; border-radius: 8px; transition: color .2s; font-weight: 600; }

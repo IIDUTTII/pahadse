@@ -309,7 +309,7 @@ const primaryImage = (p) => p.imageUrls?.find(u => u?.trim()) ?? null
 .thumb-img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
 }
 .emoji-fallback {
   font-size: 64px;
