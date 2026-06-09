@@ -1,226 +1,248 @@
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
-import { subscribeToOrders, confirmOrderInDb, rejectOrderInDb, shipOrderInDb } from '../db.js'
+import { ref, computed, watch } from 'vue'
+import { db } from '../../firebase.js'
+import { collection, query, orderBy, limit, onSnapshot, getDoc, doc } from 'firebase/firestore'
+import { confirmOrderInDb, rejectOrderInDb, shipOrderInDb } from '../db.js'
 
-const props = defineProps({
-  userRole: { type: String, default: 'user' }
-})
+const props = defineProps({ userRole: { type: String, default: 'user' } })
 
 const ordersList = ref([])
-let _unsubOrders = null
+const loadLimit = ref(6) // ✨ Starts with 6 items
+const searchQ = ref('')
+const activeFilter = ref('all')
 
-// Order Modal States
-const showOrderModal = ref(false)
-const selectedOrder = ref(null)
-const rejectionComment = ref('')
+let _unsub = null
 
-onMounted(() => {
-  _unsubOrders = subscribeToOrders(snap => {
-    ordersList.value = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))
+// ✨ DIRECT PAGINATION LOGIC
+watch(loadLimit, (newLimit) => {
+  if (_unsub) _unsub()
+  const q = query(collection(db, 'orders'), orderBy('createdAt', 'desc'), limit(newLimit))
+  _unsub = onSnapshot(q, snap => {
+    ordersList.value = snap.docs.map(d => ({ id: d.id, ...d.data() }))
   })
+}, { immediate: true })
+
+const filteredOrders = computed(() => {
+  let list = ordersList.value
+  if (activeFilter.value !== 'all') list = list.filter(o => o.shippingStatus === activeFilter.value)
+  
+  if (searchQ.value.trim()) {
+    const q = searchQ.value.toLowerCase()
+    list = list.filter(o => 
+      o.id.toLowerCase().includes(q) || 
+      (o.customerName || '').toLowerCase().includes(q) ||
+      (o.phone || '').includes(q)
+    )
+  }
+  return list
 })
 
-onUnmounted(() => {
-  if (_unsubOrders) _unsubOrders()
-})
-
-const openOrder = (o) => { selectedOrder.value = o; rejectionComment.value = ''; showOrderModal.value = true }
-const closeOrder = () => { showOrderModal.value = false; selectedOrder.value = null }
-
-const rejectOrder = async () => {
-  if (!rejectionComment.value.trim()) { alert('Please provide a reason for the customer.'); return }
-  if (!confirm('Are you sure you want to reject this order?')) return
+const searchDatabaseExtensively = async () => {
+  if (!searchQ.value) return
   try {
-    await rejectOrderInDb(selectedOrder.value.id, rejectionComment.value.trim())
-    closeOrder()
-  } catch (e) { alert(e.message) }
+    const snap = await getDoc(doc(db, 'orders', searchQ.value.trim()))
+    if (snap.exists()) {
+      const o = { id: snap.id, ...snap.data() }
+      if (!ordersList.value.find(existing => existing.id === o.id)) ordersList.value.unshift(o)
+      alert("Found exact match in database!")
+    } else {
+      alert("No order found with that exact ID.")
+    }
+  } catch (e) { console.error(e) }
 }
 
-const confirmOrder = async (orderId) => {
-  try { await confirmOrderInDb(orderId) } catch (e) { alert(e.message) }
-}
+const selected = ref(null), rejectionComment = ref(''), trackingId = ref('')
+const openOrder = (o) => { selected.value = o; rejectionComment.value = ''; trackingId.value = o.trackingId !== 'PENDING_DISPATCH' ? o.trackingId : ''; }
 
-const saveTracking = async (orderId, inputId) => {
-  const val = document.getElementById(inputId)?.value.trim()
-  if (!val) { alert('Enter an AWB tracking ID'); return }
-  try { await shipOrderInDb(orderId, val) } catch (e) { alert(e.message) }
-}
+const handleConfirm = async () => { await confirmOrderInDb(selected.value.id); selected.value.shippingStatus = 'confirmed' }
+const handleShip = async () => { if (!trackingId.value) return alert('Enter AWB tracking ID'); await shipOrderInDb(selected.value.id, trackingId.value); selected.value.shippingStatus = 'shipped'; selected.value.trackingId = trackingId.value }
+const handleReject = async () => { if (!rejectionComment.value) return alert('Enter a reason.'); await rejectOrderInDb(selected.value.id, rejectionComment.value); selected.value.shippingStatus = 'rejected' }
 
-const fmtDate = (ts) => ts?.seconds ? new Date(ts.seconds * 1000).toLocaleDateString('en-IN') : '—'
-const statusClass = (s) => ({ shipped: 'pill-green', delivered: 'pill-green', confirmed: 'pill-blue', pending: 'pill-amber', rejected: 'pill-red' }[s] || 'pill-amber')
+const fmtDate = (ts) => ts?.seconds ? new Date(ts.seconds * 1000).toLocaleString('en-IN') : '—'
 </script>
 
 <template>
   <div class="fade-in">
-    <div class="ws-head">
-      <div>
-        <h2 class="ws-title">Orders Ledger</h2>
-        <p class="ws-sub">{{ ordersList.length }} total transactions</p>
+    <div class="admin-panel-head">
+      <div class="info">
+        <h2>Orders Fulfillment</h2>
+        <p>Manage shipments, process AWB tracking, and handle disputes.</p>
       </div>
-    </div>
-
-    <div class="table-wrap desktop-only">
-      <table class="data-table">
-        <thead>
-          <tr><th>Order ID / Date</th><th>Customer</th><th>Address</th><th>Total</th><th>Status</th><th>Action</th></tr>
-        </thead>
-        <tbody>
-          <tr v-for="o in ordersList" :key="o.id">
-            <td>
-              <code class="id-code">{{ o.id?.substring(0, 10) }}…</code>
-              <div class="item-sub">{{ fmtDate(o.createdAt) }}</div>
-            </td>
-            <td>
-              <div class="item-name">{{ o.customerName || '—' }}</div>
-              <div class="item-sub">📞 {{ o.phone }}</div>
-            </td>
-            <td class="addr-cell">{{ o.address }}</td>
-            <td class="item-name">₹{{ o.amount }}</td>
-            <td><span :class="['status-pill', statusClass(o.shippingStatus)]">{{ o.shippingStatus || 'pending' }}</span></td>
-            <td><button class="btn-view" @click="openOrder(o)">View Details →</button></td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-
-    <div class="mobile-only">
-      <div v-for="o in ordersList" :key="'mob'+o.id" class="mob-card">
-        <div style="display:flex; justify-content:space-between; align-items:center;">
-          <code class="id-code">{{ o.id?.substring(0, 10) }}</code>
-          <span :class="['status-pill', statusClass(o.shippingStatus)]">{{ o.shippingStatus || 'pending' }}</span>
+      <div class="filters">
+        <div class="search-box">
+          <input v-model="searchQ" placeholder="Search Customer, Phone, or Order ID..." @keyup.enter="searchDatabaseExtensively" />
+          <button @click="searchDatabaseExtensively">🔍 Deep Search</button>
         </div>
-        <h4 style="margin:10px 0 4px;">{{ o.customerName }}</h4>
-        <p style="margin:0 0 10px; color:#64748B; font-size:0.9rem;">₹{{ o.amount }} | {{ fmtDate(o.createdAt) }}</p>
-        <button class="btn-view full-width" @click="openOrder(o)">Review Order</button>
+        <select v-model="activeFilter">
+          <option value="all">All Statuses</option>
+          <option value="pending">Pending</option>
+          <option value="confirmed">Confirmed</option>
+          <option value="shipped">Shipped</option>
+        </select>
       </div>
     </div>
 
-    <transition name="fade">
-      <div v-if="showOrderModal && selectedOrder" class="modal-backdrop" @click.self="closeOrder">
-        <div class="modal-box">
-          <header class="modal-head">
+    <div class="order-grid">
+      <div v-for="o in filteredOrders" :key="o.id" class="o-card" @click="openOrder(o)">
+        <div class="c-head">
+          <span :class="['pill', o.shippingStatus]">{{ o.shippingStatus || 'pending' }}</span>
+          <span class="c-time">{{ fmtDate(o.createdAt) }}</span>
+        </div>
+        <h3 class="c-name">{{ o.customerName }}</h3>
+        <p class="c-id">ID: <code>{{ o.id }}</code></p>
+        <div class="c-foot">
+          <span class="c-price">₹{{ o.amount }}</span>
+          <span class="c-items">{{ o.items?.length || 0 }} Items</span>
+        </div>
+      </div>
+    </div>
+    
+    <div class="load-more-zone"><button class="btn-outline" @click="loadLimit += 6">↓ Load Older Orders</button></div>
+
+    <Teleport to="body">
+      <div v-if="selected" class="overlay" @click.self="selected = null">
+        <div class="detail-drawer slide-left">
+          <header class="d-head">
             <div>
-              <h3 class="modal-title">Order #{{ selectedOrder.id.substring(0,8) }}</h3>
-              <div class="modal-date">{{ fmtDate(selectedOrder.createdAt) }}</div>
+              <h3>Order <code>{{ selected.id }}</code></h3>
+              <p>{{ fmtDate(selected.createdAt) }}</p>
             </div>
-            <button class="x-btn" @click="closeOrder">✕</button>
+            <button class="close-x" @click="selected = null">✕</button>
           </header>
 
-          <div class="modal-body">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-              <strong>Status:</strong>
-              <span :class="['status-pill lg', statusClass(selectedOrder.shippingStatus)]">{{ selectedOrder.shippingStatus || 'pending' }}</span>
+          <div class="d-body">
+            <div :class="['status-ribbon', selected.shippingStatus]">
+              <strong>Current Status:</strong> <span>{{ (selected.shippingStatus || 'Pending').toUpperCase() }}</span>
             </div>
 
-            <div class="items-list">
-              <div v-for="item in selectedOrder.items" :key="item.productId" class="item-strip">
-                <span class="item-emoji">{{ item.emoji || '📦' }}</span>
-                <span style="flex:1; font-weight:700;">{{ item.name }} <span style="color:#64748b; font-weight:500;">× {{ item.quantity }}</span></span>
-                <strong>₹{{ item.price * item.quantity }}</strong>
+            <section class="info-sec">
+              <h4>Delivery Destination</h4>
+              <div class="d-card">
+                <strong>{{ selected.customerName }}</strong>
+                <p>📞 {{ selected.phone }}</p>
+                <hr>
+                <p class="address-text">{{ selected.address }}</p>
               </div>
-            </div>
+            </section>
 
-            <div class="pricing-block">
-              <div class="price-row"><span>Payment Gateway</span><span class="tag-pill">{{ selectedOrder.paymentMethod || '—' }}</span></div>
-              <div v-if="selectedOrder.couponCode" class="price-row" style="color: #16A34A;">
-                <span>Voucher ({{ selectedOrder.couponCode }})</span><span>-₹{{ selectedOrder.couponDiscount }}</span>
+            <section class="info-sec">
+              <h4>Cart Inventory</h4>
+              <div class="d-card items-list">
+                <div v-for="item in selected.items" :key="item.productId" class="item-row">
+                  <span class="i-icon">{{ item.emoji || '📦' }}</span>
+                  <div class="i-info"><strong>{{ item.name }}</strong><br><span>Qty: {{ item.quantity }} × ₹{{ item.price }}</span></div>
+                  <strong class="i-total">₹{{ item.quantity * item.price }}</strong>
+                </div>
               </div>
-              <div class="price-row grand"><span>Grand Total</span><strong>₹{{ selectedOrder.amount }}</strong></div>
-            </div>
+            </section>
 
-            <div class="addr-block">
-              <strong>Delivery Destination:</strong><br>
-              {{ selectedOrder.customerName }} (📞 {{ selectedOrder.phone }})<br>
-              <p style="margin-top:4px; font-weight:500;">{{ selectedOrder.address }}</p>
-            </div>
-
-            <div v-if="['pending', 'confirmed'].includes(selectedOrder.shippingStatus)" class="action-block">
-              <button v-if="selectedOrder.shippingStatus === 'pending'" class="btn-confirm-full" @click="confirmOrder(selectedOrder.id)">✓ Confirm & Allocate Stock</button>
-              
-              <div class="tracking-row" style="margin-top:10px;">
-                <input :id="'awb_' + selectedOrder.id" type="text" placeholder="Paste AWB Tracking Link…" class="cf-input" />
-                <button class="btn-primary" @click="saveTracking(selectedOrder.id, 'awb_' + selectedOrder.id)">Mark Shipped</button>
+            <section class="info-sec">
+              <h4>Financials</h4>
+              <div class="d-card math-grid">
+                <div><span>Method</span><strong>{{ selected.paymentMethod }}</strong></div>
+                <div v-if="selected.couponCode"><span>Voucher</span><strong class="text-green">-₹{{ selected.couponDiscount }} ({{ selected.couponCode }})</strong></div>
+                <div><span>Net Settlement</span><strong style="font-size:1.2rem;">₹{{ selected.amount }}</strong></div>
               </div>
+            </section>
 
-              <div class="reject-zone">
-                <label style="color:#DC2626; font-weight:800; font-size:0.8rem; text-transform:uppercase;">Cancel & Reject</label>
-                <textarea v-model="rejectionComment" class="reject-textarea" placeholder="Reason for cancellation..."></textarea>
-                <button class="btn-reject-full" @click="rejectOrder">✕ Reject Order</button>
+            <section class="action-zone" v-if="['pending', 'confirmed'].includes(selected.shippingStatus)">
+              <h4>Fulfillment Actions</h4>
+              <button v-if="selected.shippingStatus === 'pending'" class="btn primary full" @click="handleConfirm">✓ Authorize & Confirm</button>
+              <div class="ship-box">
+                <input v-model="trackingId" placeholder="Paste Courier Tracking URL/ID..." />
+                <button class="btn black" @click="handleShip">Mark as Shipped</button>
               </div>
-            </div>
+              <div class="reject-box">
+                <textarea v-model="rejectionComment" placeholder="Explain rejection reason to user..."></textarea>
+                <button class="btn danger full" @click="handleReject">✕ Reject & Cancel Order</button>
+              </div>
+            </section>
 
-            <div v-if="selectedOrder.shippingStatus === 'shipped'" class="shipped-tag">🚚 Tracking: <strong>{{ selectedOrder.trackingId }}</strong></div>
-            <div v-if="selectedOrder.shippingStatus === 'rejected'" class="rejected-tag"><strong>⚠️ Order Rejected</strong><p>Reason: "{{ selectedOrder.adminComment }}"</p></div>
+            <div v-if="selected.shippingStatus === 'shipped'" class="tracking-display">
+              🚚 Active Tracking String: <br><code>{{ selected.trackingId }}</code>
+            </div>
           </div>
         </div>
       </div>
-    </transition>
-
+    </Teleport>
   </div>
 </template>
 
 <style scoped>
-/* CSS Styles from your previous admin layout */
-.fade-in { animation: fIn 0.3s ease-out; }
-@keyframes fIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
-.ws-head { margin-bottom: 24px; }
-.ws-title { font-size: 1.6rem; font-weight: 800; color: #0F172A; margin: 0; }
-.ws-sub { color: #64748B; font-size: 0.9rem; margin-top: 4px; }
-.table-wrap { background: #FFFFFF; border-radius: 12px; border: 1px solid #E2E8F0; box-shadow: 0 4px 6px rgba(0,0,0,0.02); }
-.data-table { width: 100%; border-collapse: collapse; text-align: left; }
-.data-table th { background: #F8FAFC; padding: 16px; font-size: 0.85rem; font-weight: 800; text-transform: uppercase; color: #475569; border-bottom: 2px solid #E2E8F0; }
-.data-table td { padding: 16px; border-bottom: 1px solid #E2E8F0; color: #0F172A; }
-.id-code { background: #F1F5F9; padding: 4px 8px; border-radius: 6px; font-family: monospace; font-size: 0.85rem; border: 1px solid #E2E8F0; }
-.item-name { font-weight: 800; color: #0F172A; }
-.item-sub { font-size: 0.8rem; color: #64748B; margin-top: 4px; font-weight: 500; }
-.addr-cell { font-size: 0.85rem; max-width: 250px; line-height: 1.4; color: #475569; }
-.btn-view { background: #0F2A1F; color: white; border: none; padding: 8px 16px; border-radius: 6px; font-weight: 700; cursor: pointer; transition: 0.2s; }
-.btn-view:hover { background: #0a1c14; }
-.status-pill { padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 800; text-transform: uppercase; }
-.status-pill.lg { padding: 6px 14px; font-size: 0.85rem; }
-.pill-green { background: #DCFCE7; color: #15803D; border: 1px solid #BBF7D0; }
-.pill-amber { background: #FEF3C7; color: #92400E; border: 1px solid #FDE68A; }
-.pill-red { background: #FEF2F2; color: #991B1B; border: 1px solid #FCA5A5; }
-.pill-blue { background: #EFF6FF; color: #1D4ED8; border: 1px solid #BFDBFE; }
+.admin-panel-head { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 20px; margin-bottom: 24px; }
+.info h2 { font-size: 1.8rem; margin: 0 0 4px; color: #0f172a; font-weight: 800; }
+.info p { margin: 0; color: #64748b; font-size: 0.95rem; }
+.filters { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.search-box { display: flex; background: #fff; border: 1px solid #cbd5e1; border-radius: 8px; overflow: hidden; }
+.search-box input { padding: 10px 14px; border: none; outline: none; width: 260px; font-size: 0.9rem; }
+.search-box button { background: #f1f5f9; border: none; border-left: 1px solid #cbd5e1; padding: 0 14px; font-weight: 700; cursor: pointer; color: #0f172a; transition: 0.2s; }
+.search-box button:hover { background: #e2e8f0; }
+.filters select { padding: 10px 14px; border: 1px solid #cbd5e1; border-radius: 8px; outline: none; background: #fff; font-weight: 600; }
 
-/* MODAL STYLES */
-.modal-backdrop { position: fixed; inset: 0; background: rgba(15,23,42,0.75); display: flex; align-items: center; justify-content: center; z-index: 300; padding: 16px; backdrop-filter: blur(4px); }
-.modal-box { background: white; width: 100%; max-width: 600px; border-radius: 16px; display: flex; flex-direction: column; max-height: 90vh; box-shadow: 0 25px 50px rgba(0,0,0,0.25); overflow: hidden; }
-.modal-head { padding: 20px 24px; border-bottom: 1px solid #E2E8F0; background: #F8FAFC; display: flex; justify-content: space-between; align-items: center; }
-.modal-title { margin: 0; font-size: 1.2rem; font-weight: 800; color: #0F172A; }
-.modal-date { font-size: 0.85rem; color: #64748B; margin-top: 4px; font-weight: 600; }
-.x-btn { background: #F1F5F9; border: none; font-size: 1.2rem; color: #64748B; cursor: pointer; border-radius: 8px; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; }
-.x-btn:hover { background: #FEE2E2; color: #DC2626; }
-.modal-body { padding: 24px; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; }
+.order-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+.o-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; cursor: pointer; transition: 0.2s; box-shadow: 0 4px 6px rgba(0,0,0,0.02); }
+.o-card:hover { border-color: #0F2A1F; transform: translateY(-2px); box-shadow: 0 10px 20px rgba(15,42,31,0.05); }
+.c-head { display: flex; justify-content: space-between; margin-bottom: 12px; }
+.c-time { font-size: 0.75rem; color: #94a3b8; font-weight: 700; text-transform: uppercase; }
+.c-name { margin: 0 0 4px; font-size: 1.15rem; font-weight: 800; color: #0f172a; }
+.c-id code { font-size: 0.8rem; color: #64748b; background: #f1f5f9; padding: 2px 6px; border-radius: 4px; }
+.c-foot { display: flex; justify-content: space-between; margin-top: 16px; padding-top: 16px; border-top: 1px dashed #e2e8f0; align-items: center; }
+.c-price { font-size: 1.2rem; font-weight: 900; color: #0f172a; }
+.c-items { font-size: 0.85rem; font-weight: 700; color: #64748b; background: #f8fafc; padding: 4px 10px; border-radius: 20px; }
 
-.items-list { border: 1px solid #E2E8F0; border-radius: 12px; background: #F8FAFC; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
-.item-strip { display: flex; align-items: center; gap: 12px; font-size: 0.95rem; color: #0F172A; }
-.pricing-block { border-top: 2px dashed #E2E8F0; padding-top: 16px; display: flex; flex-direction: column; gap: 10px; }
-.price-row { display: flex; justify-content: space-between; font-weight: 600; color: #475569; }
-.price-row.grand { font-size: 1.2rem; font-weight: 900; color: #0F172A; margin-top: 8px; }
-.tag-pill { background: #E2E8F0; padding: 2px 8px; border-radius: 6px; font-family: monospace; font-size: 0.8rem; text-transform: uppercase; color: #0F172A; }
-.addr-block { background: #F1F5F9; padding: 16px; border-radius: 12px; border: 1px dashed #CBD5E1; color: #334155; font-size: 0.95rem; line-height: 1.5; }
+.pill { padding: 4px 10px; border-radius: 20px; font-size: 0.72rem; font-weight: 800; text-transform: uppercase; }
+.pending { background: #fffbeb; color: #b45309; }
+.confirmed { background: #eff6ff; color: #1d4ed8; }
+.shipped { background: #dcfce7; color: #15803d; }
+.rejected { background: #fef2f2; color: #dc2626; }
 
-.btn-confirm-full { width: 100%; background: #2563EB; color: white; padding: 14px; border: none; border-radius: 8px; font-weight: 800; cursor: pointer; font-size: 1rem; }
-.btn-confirm-full:hover { background: #1D4ED8; }
-.tracking-row { display: flex; gap: 8px; }
-.cf-input { flex: 1; padding: 12px; border: 1px solid #CBD5E1; border-radius: 8px; outline: none; font-size: 0.95rem; }
-.cf-input:focus { border-color: #0F2A1F; }
-.btn-primary { background: #0F2A1F; color: white; padding: 12px 20px; border: none; border-radius: 8px; font-weight: 800; cursor: pointer; }
-.reject-zone { margin-top: 16px; padding: 16px; background: #FEF2F2; border: 1px dashed #FCA5A5; border-radius: 12px; display: flex; flex-direction: column; gap: 10px; }
-.reject-textarea { padding: 12px; border: 1px solid #FCA5A5; border-radius: 8px; outline: none; font-family: inherit; resize: vertical; min-height: 60px; }
-.btn-reject-full { background: #FFFFFF; color: #DC2626; border: 2px solid #FECACA; padding: 12px; border-radius: 8px; font-weight: 800; cursor: pointer; }
+/* Modal Drawer UI */
+.overlay { position: fixed; inset: 0; background: rgba(15,23,42,0.6); z-index: 1000; display: flex; justify-content: flex-end; backdrop-filter: blur(4px); }
+.detail-drawer { width: 100%; max-width: 500px; background: #f8fafc; height: 100vh; display: flex; flex-direction: column; box-shadow: -10px 0 40px rgba(0,0,0,0.1); }
+.slide-left { animation: sLeft 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
+@keyframes sLeft { from { transform: translateX(100%); } to { transform: translateX(0); } }
 
-.shipped-tag { background: #F0FDF4; border: 1px solid #BBF7D0; color: #15803D; padding: 16px; border-radius: 12px; font-weight: 800; }
-.rejected-tag { background: #FEF2F2; border: 1px solid #FECACA; color: #991B1B; padding: 16px; border-radius: 12px; font-weight: 800; }
-.rejected-tag p { margin: 4px 0 0; font-size: 0.9rem; font-weight: 500; font-style: italic; }
+.d-head { padding: 24px; background: #fff; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; }
+.d-head h3 { margin: 0; font-size: 1.4rem; color: #0f172a; }
+.d-head p { margin: 4px 0 0; color: #64748b; font-size: 0.9rem; }
+.close-x { background: #f1f5f9; border: none; width: 36px; height: 36px; border-radius: 8px; font-weight: 800; cursor: pointer; color: #475569; }
+.d-body { padding: 24px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 24px; }
 
-.desktop-only { display: block; }
-.mobile-only { display: none; }
-@media (max-width: 800px) {
-  .desktop-only { display: none; }
-  .mobile-only { display: flex; flex-direction: column; gap: 12px; }
-  .mob-card { background: white; padding: 16px; border-radius: 12px; border: 1px solid #E2E8F0; }
-  .full-width { width: 100%; margin-top: 12px; }
-}
+.status-ribbon { padding: 16px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; font-size: 0.9rem; border: 1px solid; }
+.status-ribbon.pending { background: #fffbeb; border-color: #fde68a; color: #92400e; }
+.status-ribbon.shipped { background: #dcfce7; border-color: #bbf7d0; color: #16a34a; }
+.info-sec h4 { font-size: 0.8rem; font-weight: 800; text-transform: uppercase; color: #64748b; margin: 0 0 10px; letter-spacing: 0.5px; }
+.d-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; box-shadow: 0 2px 4px rgba(0,0,0,0.01); }
+.d-card strong { color: #0f172a; font-size: 1.05rem; }
+.d-card p { margin: 4px 0 0; color: #475569; font-size: 0.9rem; }
+.d-card hr { border: none; border-top: 1px dashed #e2e8f0; margin: 12px 0; }
+
+.item-row { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid #f1f5f9; }
+.item-row:last-child { border: none; padding-bottom: 0; }
+.i-icon { font-size: 1.5rem; background: #f8fafc; padding: 8px; border-radius: 8px; border: 1px solid #e2e8f0; }
+.i-info { flex: 1; }
+.i-info span { color: #64748b; font-size: 0.85rem; }
+.i-total { font-weight: 900; }
+
+.math-grid { display: flex; flex-direction: column; gap: 12px; }
+.math-grid div { display: flex; justify-content: space-between; font-size: 0.95rem; }
+.math-grid span { color: #64748b; font-weight: 600; }
+.text-green { color: #16a34a !important; }
+
+.action-zone { background: #fff; padding: 20px; border-radius: 12px; border: 2px dashed #cbd5e1; display: flex; flex-direction: column; gap: 16px; }
+.btn { padding: 12px; border-radius: 8px; font-weight: 800; border: none; cursor: pointer; transition: 0.2s; font-size: 0.95rem; }
+.btn.full { width: 100%; }
+.btn.primary { background: #2563eb; color: #fff; }
+.btn.black { background: #0f172a; color: #fff; }
+.btn.danger { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+.ship-box { display: flex; gap: 8px; }
+.ship-box input { flex: 1; padding: 12px; border: 1px solid #cbd5e1; border-radius: 8px; outline: none; }
+.reject-box textarea { width: 100%; box-sizing: border-box; padding: 12px; border: 1px solid #fca5a5; border-radius: 8px; resize: vertical; min-height: 80px; margin-bottom: 8px; outline: none; }
+
+.tracking-display { padding: 16px; background: #0f172a; color: white; border-radius: 12px; text-align: center; }
+.tracking-display code { display: block; margin-top: 8px; font-size: 1.1rem; color: #10b981; }
+
+.load-more-zone { display: flex; justify-content: center; padding: 24px 0; }
+.btn-outline { background: white; border: 2px solid #cbd5e1; padding: 12px 24px; border-radius: 30px; font-weight: 700; cursor: pointer; color: #0f172a; transition: 0.2s; }
+.btn-outline:hover { border-color: #0F2A1F; color: #0F2A1F; }
 </style>

@@ -76,6 +76,7 @@ function closeMobileMenu() { mobileMenuOpen.value = false }
       <router-link to="/">Home</router-link>
       <router-link v-if="isAdmin || isSuperAdmin" to="/admin">Admin</router-link>
       <router-link v-if="currentUser" to="/cart">Cart</router-link>
+      <router-link v-if="currentUser" to="/orders">Orders</router-link>
       <router-link v-if="currentUser" to="/user">Profile</router-link>
       <router-link to="/terms">Terms</router-link>
       <router-link to="/about">About</router-link>
@@ -121,9 +122,12 @@ function closeMobileMenu() { mobileMenuOpen.value = false }
 
   <nav class="mobile-bottom-nav">
     <router-link to="/" class="mob-item"><span>🏠</span><span>Home</span></router-link>
-    <router-link to="/terms" class="mob-item"><span>🛍️</span><span>Terms</span></router-link>
+    
     <router-link to="/cart" class="mob-item"><span>🛒</span><span>Cart</span></router-link>
+    <router-link to="/orders" class="mob-item"><span>📦</span><span>Orders</span></router-link>
+    <router-link to="/terms" class="mob-item"><span>🛍️</span><span>Terms</span></router-link>
     <router-link to="/user" class="mob-item"><span>👤</span><span>Profile</span></router-link>
+    
   </nav>
 </template>
 

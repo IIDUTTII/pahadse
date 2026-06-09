@@ -17,6 +17,58 @@ import {
 } from 'firebase/firestore'
 import { signOut, sendPasswordResetEmail } from 'firebase/auth'
 
+
+// 1. UPAR IMPORTS MEIN YE ADD KARO:
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage'
+import imageCompression from 'browser-image-compression'
+import { storage } from '../firebase.js'
+import { limit, orderBy } from 'firebase/firestore'
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ✨ NEW: CENTRALIZED IMAGE UPLOAD ENGINE
+// ─────────────────────────────────────────────────────────────────────────────
+export const uploadProductImage = async (file, folderId) => {
+  const options = {
+    maxSizeMB: 0.3, // 300kb max for high-speed e-commerce
+    maxWidthOrHeight: 1200,
+    useWebWorker: true
+  }
+  const compressedFile = await imageCompression(file, options)
+  const fileExt = file.name.split('.').pop()
+  const filePath = `products/${folderId}/${Date.now()}_${Math.floor(Math.random()*1000)}.${fileExt}`
+  
+  const imageRef = storageRef(storage, filePath)
+  await uploadBytes(imageRef, compressedFile)
+  return await getDownloadURL(imageRef)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ✨ NEW: PAGINATED LISTENERS (SAVES BACKEND COMPUTATION)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function subscribeToAuditLogsPaginated(limitCount, cb) {
+  // Audit logs hamesha newest se oldest chahiye, isliye orderBy desc
+  const q = query(collection(db, 'audit_logs'), orderBy('createdAt', 'desc'), limit(limitCount))
+  return onSnapshot(q, cb)
+}
+
+export function subscribeToProductsPaginated(limitCount, cb) {
+  // Sorts newest first, limits to requested count
+  const q = query(collection(db, 'products'), orderBy('createdAt', 'desc'), limit(limitCount))
+  return onSnapshot(q, cb)
+}
+
+export function subscribeToOrdersPaginated(limitCount, cb) {
+  const q = query(collection(db, 'orders'), orderBy('createdAt', 'desc'), limit(limitCount))
+  return onSnapshot(q, cb)
+}
+
+// Custom Order Search by Exact ID (Since Firestore doesn't do full-text search natively)
+export async function fetchOrderById(orderId) {
+  const snap = await getDoc(doc(db, 'orders', orderId))
+  return snap.exists() ? { id: snap.id, ...snap.data() } : null
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // IN-MEMORY CACHE LAYER
 // ─────────────────────────────────────────────────────────────────────────────
@@ -327,6 +379,11 @@ export async function addProductToCart(product, finalPrice) {
   const user = auth.currentUser
   if (!user) throw new Error('NOT_LOGGED_IN')
 
+  // URL ke liye slug banayenge
+  const slug = product.name ? product.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '') : 'product'
+  // Primary image nikalenge
+  const primaryImg = (product.imageUrls && product.imageUrls.length > 0) ? product.imageUrls[0] : null
+
   const cartRef = doc(db, 'carts', user.uid)
   await setDoc(cartRef, {
     items: arrayUnion({
@@ -334,6 +391,8 @@ export async function addProductToCart(product, finalPrice) {
       name      : product.name,
       price     : Number(finalPrice),
       emoji     : product.emoji || '📦',
+      imageUrl  : primaryImg, // ✨ SAVING IMAGE
+      slug      : slug,       // ✨ SAVING SLUG
       quantity  : 1,
     }),
   }, { merge: true })
@@ -348,6 +407,43 @@ export async function saveCartItems(updatedItems) {
   await setDoc(cartRef, { items: updatedItems }, { merge: true })
   bustCartCache()
 }
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ✨ NEW: SHIPPING CONFIGURATION MANAGEMENT
+// ─
+export async function fetchShippingConfig() {
+  try {
+    const snap = await getDoc(doc(db, 'systemConfig', 'shipping'))
+    return snap.exists() ? snap.data() : { fee: 60, freeThreshold: 499, isFreeShippingActive: true }
+  } catch (e) {
+    console.warn("Failed to fetch shipping config:", e.message)
+    return { fee: 60, freeThreshold: 499, isFreeShippingActive: true } // Fallback
+  }
+}
+
+// UPDATE SHIPPING CONFIGURATION (Admin Only)
+export async function updateShippingConfig(configPayload) {
+  try {
+    const ref = doc(db, 'systemConfig', 'shipping')
+    const oldSnap = await getDoc(ref)
+    const oldData = oldSnap.exists() ? oldSnap.data() : null
+
+    await setDoc(ref, configPayload, { merge: true })
+
+    await createAuditLog(
+      'UPDATE_SHIPPING_CONFIG',
+      'systemConfig',
+      'shipping',
+      oldData,
+      configPayload
+    )
+  } catch (e) {
+    console.error("Shipping config update failed:", e.message)
+    throw e
+  }
+}
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // USERS / AUTH

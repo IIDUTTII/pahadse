@@ -1,25 +1,21 @@
 <script setup>
-/**
- * checkout.vue — Premium High-Contrast Checkout Terminal Console
- * Updates: Inherits active voucher details from cart, applies discounts, and saves to order blueprint.
- */
+// checkout.vue ka STARTING part replace karo
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { db, auth } from '../firebase.js'
 import { doc, onSnapshot, getDoc } from 'firebase/firestore'
-import { createCustomerOrderDocument } from './db.js'
+import { createCustomerOrderDocument, fetchShippingConfig } from './db.js' // ✨ ADDED fetchShippingConfig
 
 defineOptions({ name: 'Checkout' })
 const router = useRouter()
 
 const cartItems = ref([]), loading = ref(true), userAccountData = ref(null), processingOrder = ref(false)
 const isCodGloballyActive = ref(true), selectedAddressId = ref(''), selectedPaymentMethod = ref('online')
-
-// ✨ NEW: Retrieve coupon metrics from sessionStorage
 const appliedPromoCode = ref(window.sessionStorage.getItem('active_promo_code') || null)
 const appliedPromoDiscount = ref(Number(window.sessionStorage.getItem('active_promo_discount')) || 0)
 
-const SHIPPING_FEE = 60, FREE_SHIPPING_THRESHOLD = 499
+// ✨ NEW: Dynamic Shipping State
+const shippingConfig = ref({ fee: 60, freeThreshold: 499, isFreeShippingActive: true })
 
 onMounted(() => {
   auth.onAuthStateChanged(async (user) => {
@@ -42,14 +38,25 @@ onMounted(() => {
     try {
       const configSnap = await getDoc(doc(db, 'systemConfig', 'gateways'))
       if (configSnap.exists()) isCodGloballyActive.value = configSnap.data().isCodActive
+      
+      // ✨ FETCH SHIPPING SETTINGS
+      const shipCfg = await fetchShippingConfig()
+      if (shipCfg) shippingConfig.value = shipCfg
     } catch (e) { console.warn(e.message) }
   })
 })
 
 const subtotal = computed(() => cartItems.value.reduce((s, i) => s + i.price * i.quantity, 0))
-const shippingCost = computed(() => subtotal.value >= FREE_SHIPPING_THRESHOLD ? 0 : SHIPPING_FEE)
-// ✨ NEW: Calculate Grand Total inclusive of the coupon discount
+
+// ✨ NEW: Dynamic Shipping Math
+const shippingCost = computed(() => {
+  if (subtotal.value === 0) return 0
+  if (shippingConfig.value.isFreeShippingActive && subtotal.value >= shippingConfig.value.freeThreshold) return 0
+  return Number(shippingConfig.value.fee) || 0
+})
+
 const grandTotal = computed(() => Math.max(subtotal.value - appliedPromoDiscount.value + shippingCost.value, 0))
+
 
 const activeAddressesList = computed(() => userAccountData.value?.addresses || [])
 const activeSelectedAddressObject = computed(() => activeAddressesList.value.find(a => a.id === selectedAddressId.value))
@@ -66,14 +73,23 @@ const processCheckoutSubmission = async () => {
       customerName: target.fullName,
       phone: target.phone,
       address: `${target.streetAddress}, ${target.city}, ${target.state} - ${target.pincode}`,
-      items: cartItems.value.map(i => ({ productId: i.productId, name: i.name, quantity: i.quantity, price: i.price, emoji: i.emoji || '📦' })),
       
-      // ✨ NEW: Granular accounting payload
+      // ✨ PASSING IMAGE & SLUG INTO FINAL ORDER
+      items: cartItems.value.map(i => ({ 
+        productId: i.productId, 
+        name: i.name, 
+        quantity: i.quantity, 
+        price: i.price, 
+        emoji: i.emoji || '📦',
+        imageUrl: i.imageUrl || null,
+        slug: i.slug || 'product'
+      })),
+      
       subtotal: subtotal.value,
       shippingCost: shippingCost.value,
       couponCode: appliedPromoCode.value,
       couponDiscount: appliedPromoDiscount.value,
-      amount: grandTotal.value, // Final paid amount
+      amount: grandTotal.value,
       
       paymentMethod: selectedPaymentMethod.value,
       paymentStatus: selectedPaymentMethod.value === 'cod' ? 'pending_collection' : 'paid',
@@ -83,12 +99,11 @@ const processCheckoutSubmission = async () => {
 
     const orderId = await createCustomerOrderDocument(finalizedOrderBlueprint)
     
-    // Clear the active coupon from memory once the order is placed successfully
     window.sessionStorage.removeItem('active_promo_discount')
     window.sessionStorage.removeItem('active_promo_code')
 
     alert(`Order Registered Successfully! ID: ${orderId}`)
-    router.push('/user')
+    router.push('/user') // Usually goes to /orders but you can adjust
   } catch (error) {
     alert("Operation aborted: " + error.message)
   } finally { processingOrder.value = false }
@@ -145,19 +160,28 @@ const processCheckoutSubmission = async () => {
         <div class="summary-sticky-card-box">
           <h3>Review Allocation Items</h3>
           <div class="summary-divider-line"></div>
+          
           <div class="checkout-read-only-basket-list">
             <div v-for="item in cartItems" :key="item.productId" class="summary-item-row-strip">
               <div class="item-visual-meta">
-                <span class="item-emoji-icon">{{ item.emoji || '🍯' }}</span>
-                <div class="item-names-block"><strong class="item-lbl-name">{{ item.name }}</strong><span class="item-lbl-qty">Batch Qty: {{ item.quantity }} units</span></div>
+                
+                <div class="item-thumb-mini">
+                  <img v-if="item.imageUrl" :src="item.imageUrl" class="checkout-item-img" />
+                  <span v-else class="item-emoji-icon">{{ item.emoji || '🍯' }}</span>
+                </div>
+
+                <div class="item-names-block">
+                  <strong class="item-lbl-name">{{ item.name }}</strong>
+                  <span class="item-lbl-qty">Batch Qty: {{ item.quantity }} units</span>
+                </div>
               </div>
               <span class="item-line-calc-price">₹{{ item.price * item.quantity }}</span>
             </div>
           </div>
+
           <div class="summary-divider-line"></div>
           <div class="calc-ledger-line"><span>Basket Subtotal</span><span>₹{{ subtotal }}</span></div>
           
-          <!-- ✨ NEW: Dynamic UI reflection of the applied voucher -->
           <div v-if="appliedPromoCode" class="calc-ledger-line" style="color: #16a34a; font-weight: 800;">
             <span>Voucher ({{ appliedPromoCode }})</span><span>-₹{{ appliedPromoDiscount }}</span>
           </div>
@@ -167,7 +191,7 @@ const processCheckoutSubmission = async () => {
           <div class="calc-ledger-line total-highlight-row"><span>Final Cost Balance</span><span>₹{{ grandTotal }}</span></div>
           
           <button @click="processCheckoutSubmission" :disabled="processingOrder || cartItems.length === 0" class="checkout-finalize-submit-cta-btn">
-            {{ processingOrder ? 'Encrypting Connection Matrix...' : selectedPaymentMethod === 'cod' ? 'Confirm Delivery Run (COD) 🚀' : 'Initialize Razorpay Gateway 🚀' }}
+            {{ processingOrder ? 'Encrypting Matrix...' : selectedPaymentMethod === 'cod' ? 'Confirm Delivery Run (COD) 🚀' : 'Initialize Razorpay Gateway 🚀' }}
           </button>
         </div>
       </aside>
@@ -209,10 +233,14 @@ const processCheckoutSubmission = async () => {
 .summary-sticky-card-box { background-color: #ffffff; border: 2px solid #111827; border-radius: 16px; padding: 28px; }
 .summary-sticky-card-box h3 { font-family: 'Cinzel', serif; font-size: 1.25rem; font-weight: 800; margin: 0; }
 .summary-divider-line { height: 2px; background-color: #111827; margin: 16px 0; }
-.checkout-read-only-basket-list { display: flex; flex-direction: column; gap: 14px; max-height: 220px; overflow-y: auto; }
+.checkout-read-only-basket-list { display: flex; flex-direction: column; gap: 14px; max-height: 300px; overflow-y: auto; }
 .summary-item-row-strip { display: flex; justify-content: space-between; align-items: center; }
 .item-visual-meta { display: flex; align-items: center; gap: 12px; }
-.item-emoji-icon { font-size: 1.8rem; background-color: #fafafa; border: 1px solid #e5e7eb; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; border-radius: 6px; }
+
+/* ✨ CHECKOUT IMAGE STYLING */
+.item-thumb-mini { font-size: 1.8rem; background-color: #fafafa; border: 1px solid #e5e7eb; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; border-radius: 6px; overflow: hidden; flex-shrink: 0; }
+.checkout-item-img { width: 100%; height: 100%; object-fit: cover; }
+
 .item-names-block { display: flex; flex-direction: column; }
 .item-lbl-name { font-size: 0.95rem; font-weight: 800; }
 .item-lbl-qty { font-size: 0.78rem; color: #6b7280; margin-top: 2px; }
@@ -221,7 +249,8 @@ const processCheckoutSubmission = async () => {
 .free-badge { color: #16a34a; font-weight: 800; }
 .total-highlight-row { font-size: 1.3rem; font-weight: 900; margin-top: 6px; }
 .checkout-finalize-submit-cta-btn { width: 100%; padding: 16px; background-color: #111827; color: #FAF6F0; border: none; border-radius: 30px; font-size: 0.95rem; font-weight: 800; cursor: pointer; text-transform: uppercase; margin-top: 14px; }
-.checkout-finalize-submit-cta-btn:hover { background-color: #16a34a; }
+.checkout-finalize-submit-cta-btn:hover:not(:disabled) { background-color: #16a34a; }
+.checkout-finalize-submit-cta-btn:disabled { opacity: 0.7; cursor: not-allowed; }
 .fade-in { animation: fIn 0.3s ease-out; }
 @keyframes fIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 @media (max-width: 900px) { .checkout-layout-grid { grid-template-columns: 1fr; } .checkout-bill-summary-column { position: relative; top: 0; } }

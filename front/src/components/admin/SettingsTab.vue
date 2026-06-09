@@ -1,56 +1,63 @@
 <script setup>
 import { ref, onMounted } from 'vue'
-import { fetchCoupons, saveCoupons, deleteCouponFromDb, fetchGatewayConfig, setCodStatus } from '../db.js'
+import { fetchCoupons, saveCoupons, deleteCouponFromDb, fetchGatewayConfig, setCodStatus, fetchShippingConfig, updateShippingConfig } from '../db.js'
 
-const props = defineProps({
-  userRole: { type: String, default: 'user' }
-})
+const props = defineProps({ userRole: { type: String, default: 'user' } })
 
 const isCodActive = ref(true)
 const coupons = ref([])
 const couponSaving = ref(false)
-const newCoupon = ref({
-  code: '', discount: 10, type: 'percent',
-  minOrderAmount: 0, minItems: 0, expiresAt: '', maxUses: 0, active: true
-})
+const newCoupon = ref({ code: '', discount: 10, type: 'percent', minOrderAmount: 0, minItems: 0, expiresAt: '', maxUses: 0, active: true })
+
+// ✨ NEW SHIPPING STATE
+const shippingConfig = ref({ fee: 60, freeThreshold: 499, isFreeShippingActive: true })
+const shippingSaving = ref(false)
 
 onMounted(async () => {
   try {
     const cfg = await fetchGatewayConfig()
     if (cfg) isCodActive.value = cfg.isCodActive ?? true
+    
+    // Fetch Shipping
+    const shipCfg = await fetchShippingConfig()
+    if (shipCfg) shippingConfig.value = { ...shippingConfig.value, ...shipCfg }
+
     coupons.value = await fetchCoupons()
-  } catch (e) {
-    console.warn('Settings load failed:', e.message)
-  }
+  } catch (e) { console.warn('Settings load failed:', e.message) }
 })
 
-// COD Toggle
 const toggleCod = async () => {
   const next = !isCodActive.value
-  try {
-    await setCodStatus(next)
-    isCodActive.value = next
-  } catch (e) { alert(e.message) }
+  try { await setCodStatus(next); isCodActive.value = next } catch (e) { alert(e.message) }
 }
 
-// Coupon Logic
+// ✨ NEW SHIPPING SAVE FUNCTION
+const saveShippingSettings = async () => {
+  shippingSaving.value = true
+  try {
+    await updateShippingConfig({
+      fee: Number(shippingConfig.value.fee),
+      freeThreshold: Number(shippingConfig.value.freeThreshold),
+      isFreeShippingActive: shippingConfig.value.isFreeShippingActive
+    })
+    alert('Logistics & Shipping settings synchronized successfully!')
+  } catch (e) {
+    alert(e.message)
+  } finally {
+    shippingSaving.value = false
+  }
+}
+
 const addCoupon = () => {
   if (!newCoupon.value.code.trim()) { alert('Please enter a Coupon Code.'); return }
-  coupons.value.push({
-    ...newCoupon.value,
-    code: newCoupon.value.code.toUpperCase(),
-    expiresAt: newCoupon.value.expiresAt ? new Date(newCoupon.value.expiresAt).getTime() : null
-  })
+  coupons.value.push({ ...newCoupon.value, code: newCoupon.value.code.toUpperCase(), expiresAt: newCoupon.value.expiresAt ? new Date(newCoupon.value.expiresAt).getTime() : null })
   newCoupon.value = { code: '', discount: 10, type: 'percent', minOrderAmount: 0, minItems: 0, expiresAt: '', maxUses: 0, active: true }
 }
 
 const removeCoupon = async (idx) => {
   const targetCoupon = coupons.value[idx]
   if (confirm(`Permanently delete the ${targetCoupon.code} voucher?`)) {
-    try {
-      await deleteCouponFromDb(targetCoupon.code)
-      coupons.value.splice(idx, 1)
-    } catch (e) { alert("Failed: " + e.message) }
+    try { await deleteCouponFromDb(targetCoupon.code); coupons.value.splice(idx, 1) } catch (e) { alert("Failed: " + e.message) }
   }
 }
 
@@ -61,14 +68,7 @@ const toggleCouponActive = async (idx) => {
 
 const saveCouponList = async () => {
   couponSaving.value = true
-  try { 
-    await saveCoupons(coupons.value)
-    alert('Coupons synchronized to database successfully!') 
-  } catch (e) { 
-    alert(e.message) 
-  } finally {
-    couponSaving.value = false
-  }
+  try { await saveCoupons(coupons.value); alert('Coupons synchronized to database successfully!') } catch (e) { alert(e.message) } finally { couponSaving.value = false }
 }
 </script>
 
@@ -77,31 +77,47 @@ const saveCouponList = async () => {
     <div class="ws-head">
       <div>
         <h2 class="ws-title">System Settings</h2>
-        <p class="ws-sub">Manage payment gateways and promotional vouchers.</p>
+        <p class="ws-sub">Manage gateways, logistics, and promotional matrices.</p>
       </div>
     </div>
 
     <section class="settings-card">
-      <div class="card-header">
-        <h3>💳 Payment Gateways</h3>
-        <p>Control checkout payment lanes for customers.</p>
-      </div>
+      <div class="card-header"><h3>💳 Payment Gateways</h3><p>Control checkout payment lanes for customers.</p></div>
       <div class="setting-row">
-        <div>
-          <strong>Cash on Delivery (COD)</strong>
-          <p>Allow users to place orders without upfront payment.</p>
-        </div>
-        <button class="cod-btn" :class="isCodActive ? 'cod-on' : 'cod-off'" @click="toggleCod">
-          <span class="cod-dot"></span> {{ isCodActive ? 'Enabled' : 'Disabled' }}
-        </button>
+        <div><strong>Cash on Delivery (COD)</strong><p>Allow users to place orders without upfront payment.</p></div>
+        <button class="cod-btn" :class="isCodActive ? 'cod-on' : 'cod-off'" @click="toggleCod"><span class="cod-dot"></span> {{ isCodActive ? 'Enabled' : 'Disabled' }}</button>
       </div>
     </section>
 
-    <section class="settings-card" style="margin-top: 24px;">
-      <div class="card-header">
-        <h3>🎟️ Promotional Vouchers</h3>
-        <p>Create and manage discount codes for the checkout cart.</p>
+    <section class="settings-card">
+      <div class="card-header"><h3>🚚 Logistics & Delivery</h3><p>Set shipping fees and free delivery thresholds.</p></div>
+      
+      <div class="form-grid" style="background: #F8FAFC; padding: 20px; border-radius: 12px; border: 1px solid #E2E8F0;">
+        <div class="input-col">
+          <label>Standard Shipping Fee (₹)</label>
+          <input v-model.number="shippingConfig.fee" type="number" class="c-input" min="0" />
+        </div>
+        
+        <div class="input-col">
+          <label>Free Shipping Target (₹)</label>
+          <input v-model.number="shippingConfig.freeThreshold" type="number" class="c-input" min="0" :disabled="!shippingConfig.isFreeShippingActive" />
+        </div>
+        
+        <div class="input-col" style="justify-content: center;">
+          <label class="toggle-label" style="margin-top: 10px;">
+            <input type="checkbox" v-model="shippingConfig.isFreeShippingActive" style="width: 18px; height: 18px; accent-color: #0F2A1F;" />
+            Enable Free Shipping Threshold
+          </label>
+        </div>
       </div>
+      
+      <button class="btn-primary" style="margin-top: 16px;" :disabled="shippingSaving" @click="saveShippingSettings">
+        {{ shippingSaving ? 'Saving...' : '💾 Save Shipping Config' }}
+      </button>
+    </section>
+
+    <section class="settings-card">
+      <div class="card-header"><h3>🎟️ Promotional Vouchers</h3><p>Create and manage discount codes.</p></div>
 
       <div class="coupon-form-box">
         <h4>Generate New Voucher</h4>
@@ -119,7 +135,6 @@ const saveCouponList = async () => {
       <div class="coupon-list">
         <h4>Active Database Entries ({{ coupons.length }})</h4>
         <div v-if="coupons.length === 0" class="empty-note">No active coupons found.</div>
-        
         <div v-for="(c, i) in coupons" :key="i" class="coupon-row">
           <div class="c-info">
             <code class="c-code">{{ c.code }}</code>
@@ -135,13 +150,9 @@ const saveCouponList = async () => {
             <button class="btn-danger" @click="removeCoupon(i)">Delete</button>
           </div>
         </div>
-
-        <button class="btn-primary full-width" style="margin-top: 24px; font-size:1.05rem;" :disabled="couponSaving" @click="saveCouponList">
-          {{ couponSaving ? 'Synchronizing with Database...' : '💾 Save & Deploy All Coupons' }}
-        </button>
+        <button class="btn-primary full-width" style="margin-top: 24px; font-size:1.05rem;" :disabled="couponSaving" @click="saveCouponList">{{ couponSaving ? 'Synchronizing...' : '💾 Save & Deploy All Coupons' }}</button>
       </div>
     </section>
-
   </div>
 </template>
 
@@ -152,7 +163,7 @@ const saveCouponList = async () => {
 .ws-title { font-size: 1.6rem; font-weight: 800; color: #0F172A; margin: 0; }
 .ws-sub { color: #64748B; font-size: 0.9rem; margin-top: 4px; }
 
-.settings-card { background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 16px; padding: 24px; box-shadow: 0 4px 6px rgba(0,0,0,0.02); }
+.settings-card { background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 16px; padding: 24px; box-shadow: 0 4px 6px rgba(0,0,0,0.02); margin-bottom: 24px; }
 .card-header h3 { font-size: 1.2rem; font-weight: 800; color: #0F172A; margin: 0 0 6px; }
 .card-header p { color: #64748B; font-size: 0.9rem; margin: 0 0 20px; }
 
@@ -167,11 +178,13 @@ const saveCouponList = async () => {
 
 .coupon-form-box { background: #F8FAFC; padding: 20px; border-radius: 12px; border: 1px dashed #CBD5E1; margin-bottom: 30px; }
 .coupon-form-box h4 { margin: 0 0 16px; color: #0F172A; font-weight: 800; }
-.form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; }
+.form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
 .input-col { display: flex; flex-direction: column; gap: 6px; }
 .input-col label { font-size: 0.8rem; font-weight: 700; color: #475569; text-transform: uppercase; }
 .c-input { padding: 10px; border: 1px solid #CBD5E1; border-radius: 8px; outline: none; font-family: inherit; font-size: 0.95rem; }
 .c-input:focus { border-color: #0F2A1F; }
+
+.toggle-label { font-size: 0.9rem; font-weight: 700; color: #0F172A; display: flex; align-items: center; gap: 8px; cursor: pointer; }
 
 .btn-primary { background: #0F2A1F; color: white; padding: 12px 24px; border: none; border-radius: 8px; font-weight: 800; cursor: pointer; transition: 0.2s; }
 .btn-primary:hover:not(:disabled) { background: #0a1c14; }

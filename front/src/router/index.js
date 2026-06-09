@@ -16,6 +16,7 @@ import Terms from '../components/terms.vue'
 import Return  from '../components/return-refund.vue'  
 import Contact from '../components/contact.vue'
 import About from '../components/about.vue'
+import orders from '../components/orders.vue'
 
 const routes = [
   { path: '/',                       component: Home,meta: { title: 'Home | PahadSe' }          },
@@ -32,8 +33,8 @@ const routes = [
   { path: '/terms', component: Terms,meta: { title: 'Terms | PahadSe' } },
   { path: '/return', component: Return,meta: { title: 'Return & Refund | PahadSe' } },
   { path: '/contact', component: Contact,meta: { title: 'Contact | PahadSe' } },
-  { path: '/about', component: About,meta: { title: 'About | PahadSe' } }
-
+  { path: '/about', component: About,meta: { title: 'About | PahadSe' } },
+  { path: '/orders', component: orders,meta: { title: 'Orders | PahadSe' } }
 ]
 
 const router = createRouter({

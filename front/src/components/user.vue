@@ -1,14 +1,14 @@
 <script setup>
 /**
  * User.vue — Premium Client Management Hub Terminal
- * Fixes: Restores independent profile configurations, routes chat to dedicated support collection.
+ * Fixes: Orders tab extracted to standalone route.
  */
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { auth, storage, db } from '../firebase.js'
 import { onAuthStateChanged, signOut, updateProfile } from 'firebase/auth'
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage'
-import { doc, onSnapshot, collection, query, where, updateDoc, setDoc, arrayUnion, serverTimestamp } from 'firebase/firestore'
+import { doc, onSnapshot, updateDoc, setDoc, arrayUnion, serverTimestamp } from 'firebase/firestore'
 import imageCompression from 'browser-image-compression'
 import { addNewUserAddress, removeUserAddressFromDb, modifyUserAddressInDb } from './db.js'
 
@@ -17,11 +17,10 @@ const router = useRouter()
 
 const user          = ref(null)
 const isEditingName = ref(false)
-const activeTab     = ref('profile') // profile, shipping, orders, support
+const activeTab     = ref('profile') // profile, shipping, support
 const initializing  = ref(true)
 
 const userProfileDoc  = ref(null)
-const userOrdersList  = ref([])
 
 // ── Profile Form States
 const editDisplayName = ref('')
@@ -47,11 +46,6 @@ onMounted(() => {
 
     onSnapshot(doc(db, 'users', currentUser.uid), (snap) => {
       if (snap.exists()) userProfileDoc.value = snap.data()
-    })
-
-    const ordersQuery = query(collection(db, 'orders'), where('userId', '==', currentUser.uid))
-    onSnapshot(ordersQuery, (snap) => {
-      userOrdersList.value = snap.docs.map(d => ({ id: d.id, ...d.data() }))
       initializing.value = false
     })
 
@@ -122,7 +116,7 @@ const commitAddressFormAction = async () => {
 }
 const dropAddressNode = async (addrId) => { if (confirm('Delete this delivery address?')) await removeUserAddressFromDb(addrId) }
 
-// 💬 SEND CUSTOMER SUPPORT MESSAGE (Inline execution for robustness)
+// 💬 SEND CUSTOMER SUPPORT MESSAGE
 const handleSendMessage = async () => {
   if (!newChatText.value.trim() || !user.value) return
   isSendingChat.value = true
@@ -152,7 +146,6 @@ const fmtTime = (ms) => ms ? new Date(ms).toLocaleTimeString('en-IN', { hour: '2
 
     <div v-else-if="user" class="dashboard-hub-container fade-in">
       
-      <!-- SIDEBAR AVATAR -->
       <aside class="dashboard-sidebar-pane">
         <div class="profile-avatar-assembly">
           <div class="avatar-image-frame">
@@ -169,16 +162,17 @@ const fmtTime = (ms) => ms ? new Date(ms).toLocaleTimeString('en-IN', { hour: '2
 
         <nav class="sidebar-tab-menu-stack">
           <button :class="['menu-tab-btn', { 'is-active': activeTab === 'profile' }]" @click="activeTab = 'profile'">👤 Profile Settings</button>
-          <button :class="['menu-tab-btn', { 'is-active': activeTab === 'shipping' }]" @click="activeTab = 'shipping'">📦 Shipping Workspace</button>
-          <button :class="['menu-tab-btn', { 'is-active': activeTab === 'orders' }]" @click="activeTab = 'orders'">🛍️ Orders Ledger</button>
-          <button :class="['menu-tab-btn', { 'is-active': activeTab === 'support' }]" @click="activeTab = 'support'">💬 Support & Help</button>
+          <button :class="['menu-tab-btn', { 'is-active': activeTab === 'shipping' }]" @click="activeTab = 'shipping'">📍 Saved Addresses</button>
+          
+          <button class="menu-tab-btn" @click="router.push('/orders')">📦 My Orders</button>
+          
+          <button :class="['menu-tab-btn', { 'is-active': activeTab === 'support' }]" @click="activeTab = 'support'">💬 Support Desk</button>
           <button @click="handleLogout" class="sidebar-logout-action-btn">Log Out</button>
         </nav>
       </aside>
 
       <main class="dashboard-workspace-workspace">
         
-        <!-- 👤 TAB 1: PROFILE INTERFACE -->
         <div v-if="activeTab === 'profile'" class="tab-fade-panel">
           <h2 class="workspace-section-title">Identity Profile Settings</h2>
           <p class="workspace-section-subtitle">Manage public naming conventions bound onto system invoices.</p>
@@ -194,10 +188,9 @@ const fmtTime = (ms) => ms ? new Date(ms).toLocaleTimeString('en-IN', { hour: '2
           </div>
         </div>
 
-        <!-- 📦 TAB 2: ISOLATED ADDRESS MANAGEMENT -->
         <div v-if="activeTab === 'shipping'" class="tab-fade-panel">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
-            <div><h2 class="workspace-section-title">Isolated Shipping Workspace</h2><p class="workspace-section-subtitle">Manage delivery pins safely.</p></div>
+            <div><h2 class="workspace-section-title">Delivery Addresses</h2><p class="workspace-section-subtitle">Manage your saved destinations.</p></div>
             <button v-if="!isEditingAddress" class="commit-save-btn" @click="initializeNewAddressForm">+ Create New Route</button>
           </div>
 
@@ -210,7 +203,7 @@ const fmtTime = (ms) => ms ? new Date(ms).toLocaleTimeString('en-IN', { hour: '2
               <div class="input-wrapper-field"><label>City / Tehsil</label><input v-model="addressForm.city" class="pahadse-core-input" /></div>
               <div class="input-wrapper-field"><label>Pincode</label><input v-model="addressForm.pincode" type="number" class="pahadse-core-input" /></div>
             </div>
-            <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:20px;"><button class="cancel-discard-btn" @click="isEditingAddress = false">Cancel</button><button class="commit-save-btn" @click="commitAddressFormAction">Commit Route</button></div>
+            <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:20px;"><button class="cancel-discard-btn" @click="isEditingAddress = false">Cancel</button><button class="commit-save-btn" @click="commitAddressFormAction">Save Route</button></div>
           </div>
 
           <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px;">
@@ -225,41 +218,11 @@ const fmtTime = (ms) => ms ? new Date(ms).toLocaleTimeString('en-IN', { hour: '2
           </div>
         </div>
 
-        <!-- 🛍️ TAB 3: ORDERS LOG (Chat removed) -->
-        <div v-if="activeTab === 'orders'" class="tab-fade-panel">
-          <h2 class="workspace-section-title">Provisions Dispatches History</h2>
-          <p class="workspace-section-subtitle">Track parcel trajectories.</p>
-          
-          <div style="display:flex; flex-direction:column; gap:20px;">
-            <div v-for="order in userOrdersList" :key="order.id" class="workspace-card-box" style="border:2px solid #111827;">
-              <div style="display:flex; justify-content:space-between; margin-bottom:12px; border-bottom:2px dashed #cbd5e1; padding-bottom:10px;">
-                <code>REF ID: {{ order.id }}</code><strong style="font-size:1.1rem;">Total Settle: ₹{{ order.amount }}</strong>
-              </div>
-              <div style="margin-bottom:12px;"><div v-for="item in order.items" :key="item.productId" style="font-size:0.95rem; font-weight:600;"><span>{{ item.emoji || '📦' }}</span> {{ item.name }} × {{ item.quantity }}</div></div>
-              
-              <div v-if="order.shippingStatus === 'rejected'" style="background:#fef2f2; border:2px solid #fca5a5; padding:12px; border-radius:8px; color:#dc2626; margin-bottom:12px; font-size:0.95rem;">
-                <strong>🛑 Order Rejected by Administration</strong>
-                <p v-if="order.adminComment" style="margin:4px 0 0; font-weight:700;">Reason: "{{ order.adminComment }}"</p>
-              </div>
-
-              <div style="display:flex; justify-content:space-between; align-items:center; background:#f8fafc; padding:12px; border-radius:8px; border:1px solid #cbd5e1;">
-                <div><span class="verification-badge" :class="order.shippingStatus === 'shipped' ? 'verified' : 'unverified'">Freight: {{ order.shippingStatus || 'pending' }}</span></div>
-                <div v-if="order.shippingStatus === 'shipped' && order.trackingId">
-                  <a :href="'https://www.shiprocket.in/shipment-tracking/' + order.trackingId" target="_blank" class="pahadse-action-outline-btn" style="margin:0; background:#111827; color:#ffffff; text-decoration:none;">🚚 Track Parcel Online →</a>
-                </div>
-              </div>
-            </div>
-            <div v-if="userOrdersList.length === 0" style="padding:40px; text-align:center; color:#64748b; font-weight:600; border:2px dashed #cbd5e1; border-radius:12px;">No order shipments recorded.</div>
-          </div>
-        </div>
-
-        <!-- 💬 TAB 4: NEW DEDICATED SUPPORT & HELP DESK -->
         <div v-if="activeTab === 'support'" class="tab-fade-panel" style="display:flex; flex-direction:column; height: 100%;">
-          <h2 class="workspace-section-title">Customer Support Desk</h2>
-          <p class="workspace-section-subtitle">Chat directly with the PahadSe team regarding active orders, delays, or quality.</p>
+          <h2 class="workspace-section-title">Customer Support</h2>
+          <p class="workspace-section-subtitle">Chat directly with the PahadSe team regarding active orders or queries.</p>
           
           <div class="workspace-card-box" style="flex:1; display:flex; flex-direction:column; padding:0; overflow:hidden; border:2px solid #111827; min-height: 400px;">
-            <!-- Thread Feed Area -->
             <div style="flex:1; padding:24px; overflow-y:auto; background:#f8fafc; display:flex; flex-direction:column; gap:14px;">
               <div v-if="supportMessages.length === 0" style="text-align:center; color:#64748b; margin-top:40px; font-weight:600;">Type a message below to start your support thread.</div>
               
@@ -274,7 +237,6 @@ const fmtTime = (ms) => ms ? new Date(ms).toLocaleTimeString('en-IN', { hour: '2
               </div>
             </div>
             
-            <!-- Send Field -->
             <div style="padding:16px; background:#ffffff; border-top:2px solid #cbd5e1; display:flex; gap:10px;">
               <input v-model="newChatText" placeholder="Type your message here..." class="pahadse-core-input" style="flex:1; padding:12px;" @keyup.enter="handleSendMessage" />
               <button class="commit-save-btn" style="padding:12px 28px; border-radius:8px;" @click="handleSendMessage" :disabled="isSendingChat">{{ isSendingChat ? '...' : 'Send' }}</button>
