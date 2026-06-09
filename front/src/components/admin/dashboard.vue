@@ -1,10 +1,13 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { auth } from '../../firebase.js'
-import { fetchUserRole, logoutUser } from '../db.js'
+// ✨ IMPORT ALL REQUIRED FUNCTIONS
+import { 
+  fetchUserRole, logoutUser, subscribeToProducts, subscribeToOrders, 
+  subscribeToSupportChats, fetchGatewayConfig, fetchAllUsersFromDb, fetchCoupons 
+} from '../db.js'
 
-// Tumhare naye code-split components
 import ProductsTab from './ProductsTab.vue'
 import OrdersTab from './OrdersTab.vue'
 import UsersTab from './UsersTab.vue'
@@ -16,25 +19,63 @@ import AnalyticsTab from './AnalyticsTab.vue'
 defineOptions({ name: 'AdminDashboard' })
 const router = useRouter()
 
+// ✨ STATE DECLARATIONS (Yeh sab missing tha)
 const activeTab = ref('products')
 const userRole = ref('user')
 const sidebarOpen = ref(false)
 const loading = ref(true)
+const isCodActive = ref(true)
+
+const products = ref([])
+const ordersList = ref([])
+const supportThreads = ref([])
+const usersList = ref([])
+const coupons = ref([])
+
+// ✨ SUBSCRIPTION CLEANUP VARIABLES
+let _unsubProducts = null
+let _unsubOrders = null
+let _unsubSupport = null
 
 onMounted(() => {
-  // Auth Check
   auth.onAuthStateChanged(async (user) => {
     if (user) {
       userRole.value = await fetchUserRole()
+
+      // Subscribe to Products
+      _unsubProducts = subscribeToProducts(snap => {
+        products.value = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      })
+
       if (userRole.value === 'admin' || userRole.value === 'superadmin') {
-        loading.value = false
-      } else {
-        router.push('/') 
+        _unsubOrders = subscribeToOrders(snap => {
+          ordersList.value = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+        })
+
+        _unsubSupport = subscribeToSupportChats(snap => {
+          supportThreads.value = snap.docs
+            .map(d => ({ userId: d.id, ...d.data() }))
+            .sort((a, b) => (b.lastUpdated?.seconds || 0) - (a.lastUpdated?.seconds || 0))
+        })
+
+        try {
+          const cfg = await fetchGatewayConfig()
+          isCodActive.value = cfg.isCodActive ?? true
+          usersList.value = await fetchAllUsersFromDb()
+          coupons.value = await fetchCoupons()
+        } catch(e) { console.warn(e) }
       }
+      loading.value = false // ✨ Authentication done
     } else {
       router.push('/login')
     }
   })
+})
+
+onUnmounted(() => {
+  if (_unsubProducts) _unsubProducts()
+  if (_unsubOrders) _unsubOrders()
+  if (_unsubSupport) _unsubSupport()
 })
 
 const handleLogout = async () => {

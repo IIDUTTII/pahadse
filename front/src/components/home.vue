@@ -3,6 +3,10 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { fetchActiveProducts, addProductToCart, fetchCart } from './db.js'
 
+// ✨ Naye Imports Auth check ke liye
+import { auth } from '../firebase.js' 
+import { onAuthStateChanged } from 'firebase/auth'
+
 defineOptions({ name: 'Home' })
 const router = useRouter()
 const activeFilter = ref('All')
@@ -12,24 +16,36 @@ const allProducts = ref([])
 const loading = ref(true)
 const inCartMap = ref({})
 
-// ✨ PAGINATION STATE (Initially load 8)
+// Pagination state
 const displayLimit = ref(8) 
 
-onMounted(async () => {
-  try {
-    allProducts.value = await fetchActiveProducts()
-    const cartItems = await fetchCart()
-    const map = {}
-    cartItems.forEach(item => { map[item.productId] = true })
-    inCartMap.value = map
-  } catch (e) { 
-    console.error('Home mount error:', e) 
-  } finally { 
-    loading.value = false 
-  }
+onMounted(() => {
+  // ✨ FIX: Firebase Auth ke initialize hone ka wait karenge
+  onAuthStateChanged(auth, async (user) => {
+    try {
+      loading.value = true
+      
+      // 1. Fetch public active products (Sabke liye safe hai)
+      allProducts.value = await fetchActiveProducts()
+      
+      // 2. Fetch cart ONLY agar user permanently logged in hai
+      if (user) {
+        const cartItems = await fetchCart()
+        const map = {}
+        cartItems.forEach(item => { map[item.productId] = true })
+        inCartMap.value = map
+      } else {
+        // Agar bina login load kiya hai, toh cart map khali rakho
+        inCartMap.value = {}
+      }
+    } catch (e) { 
+      console.error('Home mount error:', e) 
+    } finally { 
+      loading.value = false 
+    }
+  })
 })
 
-// ✨ UNIVERSAL URL FIX
 const generateSlug = (name) => name ? name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '') : 'product'
 const goToProduct = (product) => router.push(`/product/${generateSlug(product.name)}--${product.id}`)
 
@@ -46,11 +62,8 @@ const addToCart = async (event, product) => {
 }
 
 const products = computed(() => activeFilter.value === 'All' ? allProducts.value : allProducts.value.filter(p => p.category === activeFilter.value))
-
-// ✨ LIMITING PRODUCTS VISIBLE
 const visibleProducts = computed(() => products.value.slice(0, displayLimit.value))
 
-// When changing filters, reset the load limit back to 8
 const setFilter = (f) => {
   activeFilter.value = f
   displayLimit.value = 8
@@ -128,13 +141,6 @@ const primaryImage = (p) => p.imageUrls?.find(u => u?.trim()) ?? null
         <button class="load-more-btn" @click="displayLimit += 8">↓ Discover More Products</button>
       </div>
     </div>
-
-    <nav class="mobile-bottom-nav">
-      <router-link to="/" class="mob-item"><span>🏠</span><span>Home</span></router-link>
-      <router-link to="/terms" class="mob-item"><span>🛍️</span><span>Terms</span></router-link>
-      <router-link to="/cart" class="mob-item"><span>🛒</span><span>Cart</span></router-link>
-      <router-link to="/user" class="mob-item"><span>👤</span><span>Profile</span></router-link>
-    </nav>
   </div>
 </template>
 
@@ -214,11 +220,6 @@ const primaryImage = (p) => p.imageUrls?.find(u => u?.trim()) ?? null
 
 .empty-state { text-align: center; padding: 60px 20px; color: var(--text-muted); }
 .empty-state span { font-size: 48px; display: block; margin-bottom: 12px; }
-
-.mobile-bottom-nav { display: none; position: fixed; bottom: 0; left: 0; right: 0; background: rgba(253, 251, 247, 0.96); backdrop-filter: blur(20px); border-top: 1px solid #E2E8D5; padding: 10px 0; justify-content: space-around; z-index: 200; }
-.mob-item { display: flex; flex-direction: column; align-items: center; gap: 4px; text-decoration: none; color: #8F9E82; font-size: 11px; font-weight: 500; padding: 6px 16px; border-radius: 40px; transition: all 0.2s; }
-.mob-item span:first-child { font-size: 22px; }
-.mob-item.router-link-active { background: rgba(201, 169, 110, 0.15); color: var(--gold); }
 
 @media (max-width: 1024px) { .product-grid { grid-template-columns: repeat(3, 1fr); gap: 24px; } .hero-title { font-size: 32px; } }
 @media (max-width: 768px) { .product-grid { grid-template-columns: repeat(2, 1fr); gap: 18px; } .mobile-bottom-nav { display: flex; } .page { padding: 80px 16px 90px; } .hero { padding: 32px 20px; } .hero-title { font-size: 26px; } .hero-stats { flex-direction: column; gap: 10px; align-items: center; } .product-thumb { height: 170px; } }
