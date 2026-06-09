@@ -14,6 +14,7 @@ export const authPromise = new Promise((resolve) => {
     currentUser.value = user
     if (user) {
       const snap = await getDoc(doc(db, 'users', user.uid))
+      console.log('ROLE =>', snap.data()?.role)
       const userRole = snap.data()?.role // Extract the role string once
       
       // 👈 2. ASSIGN VALUES BASED ON TRUE ROLE STRING

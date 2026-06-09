@@ -12,7 +12,7 @@
 
 import { db, auth } from '../firebase.js'
 import {
-  collection, getDocs, getDoc, query, where,
+  collection, getDocs, getDoc, query, where, onSnapshot,
   doc, setDoc, updateDoc, deleteDoc, addDoc, increment, serverTimestamp, arrayUnion
 } from 'firebase/firestore'
 import { signOut, sendPasswordResetEmail } from 'firebase/auth'
@@ -33,6 +33,137 @@ function _bustProductListCache() {
 
 export const updateUserDisplayName = async (uid, newName) => {
   await updateDoc(doc(db, "users", uid), { displayName: newName })
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SUBSCRIPTIONS / READ HELPERS USED BY ADMIN UI
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function subscribeToProducts(cb) {
+  return onSnapshot(collection(db, 'products'), cb)
+}
+
+export function subscribeToOrders(cb) {
+  return onSnapshot(collection(db, 'orders'), cb)
+}
+
+export function subscribeToSupportChats(cb) {
+  return onSnapshot(collection(db, 'supportChats'), cb)
+}
+
+export async function fetchGatewayConfig() {
+  const snap = await getDoc(doc(db, 'systemConfig', 'gateways'))
+  return snap.exists() ? snap.data() : { isCodActive: true }
+}
+
+export async function updateOrderStatus(orderId, updates = {}) {
+  if (!orderId) throw new Error('ORDER_ID_REQUIRED')
+  await updateDoc(doc(db, 'orders', orderId), updates)
+}
+
+
+
+export async function confirmOrderInDb(orderId) {
+  const ref = doc(db, 'orders', orderId)
+  const oldSnap = await getDoc(ref)
+  const oldData = oldSnap.exists() ? oldSnap.data() : null
+  await updateDoc(ref, { shippingStatus: 'confirmed' })
+
+  await createAuditLog(
+    'CONFIRM_ORDER',
+    'order',
+    orderId,
+    oldData,
+    { shippingStatus: 'confirmed' }
+  )
+}
+
+export async function rejectOrderInDb(orderId, adminComment) {
+  const ref = doc(db, 'orders', orderId)
+  const oldSnap = await getDoc(ref)
+  const oldData = oldSnap.exists() ? oldSnap.data() : null
+  const newData = { shippingStatus: 'rejected', adminComment: adminComment.trim() }
+  await updateDoc(ref, newData)
+
+  await createAuditLog(
+    'REJECT_ORDER',
+    'order',
+    orderId,
+    oldData,
+    newData
+  )
+}
+
+export async function shipOrderInDb(orderId, trackingId) {
+  const ref = doc(db, 'orders', orderId)
+  const oldSnap = await getDoc(ref)
+  const oldData = oldSnap.exists() ? oldSnap.data() : null
+  const newData = { shippingStatus: 'shipped', trackingId: trackingId.trim() }
+  await updateDoc(ref, newData)
+
+  await createAuditLog(
+    'SHIP_ORDER',
+    'order',
+    orderId,
+    oldData,
+    newData
+  )
+}
+
+export async function sendAdminSupportReply(targetUserId, textVal) {
+  return sendSupportMessage(targetUserId, textVal, 'admin')
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AUDIT LOGGING
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function createAuditLog(
+  action,
+  entityType,
+  entityId,
+  oldData = null,
+  newData = null
+) {
+  try {
+    const currentUser = auth.currentUser
+    let role = 'unknown'
+
+    if (currentUser) {
+      const snap = await getDoc(doc(db, 'users', currentUser.uid))
+      role = snap.exists() ? (snap.data().role || 'user') : 'user'
+    }
+
+    await addDoc(collection(db, 'audit_logs'), {
+      action,
+      entityType,
+      entityId,
+      oldData,
+      newData,
+      performedByUid: currentUser?.uid || null,
+      performedByEmail: currentUser?.email || null,
+      performedByRole: role,
+      createdAt: serverTimestamp(),
+    })
+  } catch (e) {
+    console.error('createAuditLog failed:', e)
+  }
+}
+
+export async function fetchAuditLogs() {
+  try {
+    const snap = await getDocs(collection(db, 'audit_logs'))
+    const rows = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+    rows.sort((a, b) => {
+      const at = a.createdAt?.seconds || a.createdAt?.toMillis?.() || 0
+      const bt = b.createdAt?.seconds || b.createdAt?.toMillis?.() || 0
+      return bt - at
+    })
+    return rows
+  } catch (e) {
+    console.error('fetchAuditLogs failed:', e)
+    return []
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -74,12 +205,33 @@ export async function addProduct(payload) {
     ...payload,
     createdAt: serverTimestamp(),
   })
+
+  await createAuditLog(
+    'CREATE_PRODUCT',
+    'product',
+    ref.id,
+    null,
+    payload
+  )
+
   _bustProductListCache()
   return ref.id
 }
 
 export async function updateProduct(productId, payload) {
+  const oldSnap = await getDoc(doc(db, 'products', productId))
+  const oldData = oldSnap.exists() ? oldSnap.data() : null
+
   await updateDoc(doc(db, 'products', productId), payload)
+
+  await createAuditLog(
+    'UPDATE_PRODUCT',
+    'product',
+    productId,
+    oldData,
+    payload
+  )
+
   if (_productCache.has(productId)) {
     _productCache.set(productId, { ..._productCache.get(productId), ...payload })
   }
@@ -88,7 +240,19 @@ export async function updateProduct(productId, payload) {
 
 export async function toggleProductActive(productId, currentValue) {
   const newValue = !currentValue
+  const oldSnap = await getDoc(doc(db, 'products', productId))
+  const oldData = oldSnap.exists() ? oldSnap.data() : null
+
   await updateDoc(doc(db, 'products', productId), { isActive: newValue })
+
+  await createAuditLog(
+    'TOGGLE_PRODUCT_ACTIVE',
+    'product',
+    productId,
+    oldData,
+    { isActive: newValue }
+  )
+
   if (_productCache.has(productId)) {
     _productCache.set(productId, { ..._productCache.get(productId), isActive: newValue })
   }
@@ -96,7 +260,19 @@ export async function toggleProductActive(productId, currentValue) {
 }
 
 export async function deleteProduct(productId) {
+  const oldSnap = await getDoc(doc(db, 'products', productId))
+  const oldData = oldSnap.exists() ? oldSnap.data() : null
+
   await deleteDoc(doc(db, 'products', productId))
+
+  await createAuditLog(
+    'DELETE_PRODUCT',
+    'product',
+    productId,
+    oldData,
+    null
+  )
+
   _productCache.delete(productId)
   _bustProductListCache()
 }
@@ -208,8 +384,25 @@ export const fetchAllUsersFromDb = async () => {
 
 export const updateUserRoleInDb = async (userId, newRole) => {
   try {
+    const actorRole = await fetchUserRole()
+
+    if (newRole === 'superadmin' && actorRole !== 'superadmin') {
+      throw new Error('ONLY_SUPERADMIN_CAN_ASSIGN_SUPERADMIN')
+    }
+
     const userRef = doc(db, 'users', userId)
+    const oldSnap = await getDoc(userRef)
+    const oldData = oldSnap.exists() ? oldSnap.data() : null
+
     await updateDoc(userRef, { role: newRole })
+
+    await createAuditLog(
+      'ROLE_CHANGE',
+      'user',
+      userId,
+      oldData,
+      { role: newRole }
+    )
   } catch (error) {
     console.error("Role elevation transaction aborted:", error)
     throw error
@@ -241,6 +434,75 @@ export const dispatchPasswordResetToken = async (clientEmail) => {
     console.error('Database Layer — Reset Link Transmission Failure:', error.code)
     throw error
   }
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CONTACT QUERIES
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function createContactQuery(payload) {
+  const ref = await addDoc(collection(db, 'contact_queries'), {
+    ...payload,
+    status: 'pending',
+    createdAt: serverTimestamp(),
+  })
+
+  await createAuditLog(
+    'CREATE_CONTACT_QUERY',
+    'contact_query',
+    ref.id,
+    null,
+    payload
+  )
+
+  return ref.id
+}
+
+export async function fetchContactQueries() {
+  try {
+    const snap = await getDocs(collection(db, 'contact_queries'))
+    const rows = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+    rows.sort((a, b) => {
+      const at = a.createdAt?.seconds || 0
+      const bt = b.createdAt?.seconds || 0
+      return bt - at
+    })
+    return rows
+  } catch (error) {
+    console.error('fetchContactQueries failed:', error)
+    return []
+  }
+}
+
+export async function updateContactQueryStatus(queryId, status) {
+  const ref = doc(db, 'contact_queries', queryId)
+  const oldSnap = await getDoc(ref)
+  const oldData = oldSnap.exists() ? oldSnap.data() : null
+  await updateDoc(ref, { status })
+
+  await createAuditLog(
+    'UPDATE_CONTACT_QUERY_STATUS',
+    'contact_query',
+    queryId,
+    oldData,
+    { status }
+  )
+}
+
+export async function deleteContactQuery(queryId) {
+  const ref = doc(db, 'contact_queries', queryId)
+  const oldSnap = await getDoc(ref)
+  const oldData = oldSnap.exists() ? oldSnap.data() : null
+  await deleteDoc(ref)
+
+  await createAuditLog(
+    'DELETE_CONTACT_QUERY',
+    'contact_query',
+    queryId,
+    oldData,
+    null
+  )
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -376,7 +638,15 @@ export const createCustomerOrderDocument = async (orderPayload) => {
       trackingId: 'PENDING_DISPATCH',
       createdAt: serverTimestamp()
     })
-    
+
+    await createAuditLog(
+      'CREATE_ORDER',
+      'order',
+      orderRef.id,
+      null,
+      orderPayload
+    )
+
     // Clear out user's cart bucket array immediately upon successful purchase
     await setDoc(doc(db, 'carts', user.uid), { items: [] }, { merge: true })
 
@@ -389,7 +659,7 @@ export const createCustomerOrderDocument = async (orderPayload) => {
         console.warn('Database Layer — Failed to increment coupon usage count:', couponErr)
       }
     }
-    
+
     return orderRef.id
   } catch (error) {
     console.error("Database Layer — Failed executing order document creation block:", error)
@@ -415,19 +685,33 @@ export const saveCoupons = async (couponList) => {
   try {
     for (const coupon of couponList) {
       if (!coupon.code) continue
-      const docRef = doc(db, 'coupons', coupon.code.toUpperCase())
-      await setDoc(docRef, {
-        code: coupon.code.toUpperCase(),
+      const code = coupon.code.toUpperCase()
+      const docRef = doc(db, 'coupons', code)
+      const oldSnap = await getDoc(docRef)
+      const oldData = oldSnap.exists() ? oldSnap.data() : null
+
+      const payload = {
+        code,
         discount: Number(coupon.discount) || 0,
         type: coupon.type || 'percent',
         minOrderAmount: Number(coupon.minOrderAmount) || 0,
         minItems: Number(coupon.minItems) || 0,
         expiresAt: coupon.expiresAt || null,
-        maxUses: Number(coupon.maxUses) || 0, // ✨ NEW: Stores the maximum usage limit
-        usageCount: Number(coupon.usageCount) || 0, // ✨ NEW: Tracks how many times it was used
+        maxUses: Number(coupon.maxUses) || 0,
+        usageCount: Number(coupon.usageCount) || 0,
         active: coupon.active ?? true,
         updatedAt: serverTimestamp()
-      }, { merge: true })
+      }
+
+      await setDoc(docRef, payload, { merge: true })
+
+      await createAuditLog(
+        oldData ? 'UPDATE_COUPON' : 'CREATE_COUPON',
+        'coupon',
+        code,
+        oldData,
+        payload
+      )
     }
   } catch (error) {
     console.error('Database Layer — Coupon serialization runtime error:', error)
@@ -448,8 +732,20 @@ export const saveCoupons = async (couponList) => {
 export const deleteCouponFromDb = async (couponCode) => {
   if (!couponCode) return
   try {
-    const docRef = doc(db, 'coupons', couponCode.toUpperCase())
+    const code = couponCode.toUpperCase()
+    const docRef = doc(db, 'coupons', code)
+    const oldSnap = await getDoc(docRef)
+    const oldData = oldSnap.exists() ? oldSnap.data() : null
+
     await deleteDoc(docRef)
+
+    await createAuditLog(
+      'DELETE_COUPON',
+      'coupon',
+      code,
+      oldData,
+      null
+    )
   } catch (error) {
     console.error('Database Layer — Failed to delete coupon document:', error)
     throw error
@@ -459,7 +755,19 @@ export const deleteCouponFromDb = async (couponCode) => {
 export const setCodStatus = async (statusActive) => {
   try {
     const configRef = doc(db, 'systemConfig', 'gateways')
-    await setDoc(configRef, { isCodActive: !!statusActive }, { merge: true })
+    const oldSnap = await getDoc(configRef)
+    const oldData = oldSnap.exists() ? oldSnap.data() : null
+    const newData = { isCodActive: !!statusActive }
+
+    await setDoc(configRef, newData, { merge: true })
+
+    await createAuditLog(
+      'TOGGLE_COD',
+      'system_config',
+      'gateways',
+      oldData,
+      newData
+    )
   } catch (error) {
     console.error('Database Layer — Gateway toggling runtime error:', error)
     throw error
@@ -518,4 +826,24 @@ export const sendSupportMessage = async (targetUserId, textVal, roleType) => {
     console.error("Support Chat Error:", error)
     throw error
   }
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AUDIT LOGGING
+// ─────────────────────────────────────────────────────────────────────────────
+
+
+export async function logAudit(action, details = {}) {
+  const user = auth.currentUser
+
+  await addDoc(collection(db, 'audit_logs'), {
+    action,
+    details,
+
+    performedByUid: user?.uid || null,
+    performedByEmail: user?.email || null,
+
+    createdAt: serverTimestamp()
+  })
 }

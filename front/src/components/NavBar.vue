@@ -43,6 +43,13 @@ onMounted(() => {
   window.addEventListener('scroll', handleScroll)
 })
 
+import { watch } from 'vue'
+
+watch([isAdmin, isSuperAdmin], () => {
+  console.log('Admin:', isAdmin.value)
+  console.log('SuperAdmin:', isSuperAdmin.value)
+})
+
 onUnmounted(() => {
   if (unsubscribeAuth) unsubscribeAuth()
   window.removeEventListener('scroll', handleScroll)

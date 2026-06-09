@@ -1,16 +1,23 @@
 <script setup>
 /**
  * ProductForm.vue — Secure Standalone Product Management Workspace
- * Features: Dynamic backward calculation engine and token-free URL slugification decoding hooks.
  */
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { fetchProductById, updateProduct, addProduct } from './db.js'
+// Auth import kar rahe hain taaki permissions check ho sakein
+import { auth } from '../firebase.js' 
 
 defineOptions({ name: 'ProductForm' })
-const route = useRoute(), router = useRouter()
+const route = useRoute()
+const router = useRouter()
 
-const isEditing = ref(false), rawId = ref(null), activeTab = ref('basic'), saving = ref(false), initializing = ref(true), activePreviewIdx = ref(0)
+const isEditing = ref(false)
+const rawId = ref(null)
+const activeTab = ref('basic')
+const saving = ref(false)
+const initializing = ref(true)
+const activePreviewIdx = ref(0)
 
 const getDefaultForm = () => ({
   name: '', description: '', price: 0, weight: '', category: 'Spices & Herbs',
@@ -21,7 +28,7 @@ const getDefaultForm = () => ({
 const form = ref(getDefaultForm())
 const cleanImages = computed(() => (form.value.imageUrls || []).filter(u => u && u.trim() !== ''))
 
-// 📊 NEW ENGINE: Computes how much amount the customer pays after discount is deducted
+// 📊 NEW ENGINE: Computes how much amount the customer pays after discount
 const calculatedFinalPrice = computed(() => {
   const basePrice = Number(form.value.price) || 0
   if (!form.value.discount?.isDiscounted) return basePrice
@@ -29,42 +36,45 @@ const calculatedFinalPrice = computed(() => {
   return Math.round(basePrice * (1 - percentNode / 100))
 })
 
-// 📊 NEW ENGINE: Computes the exact monetary margin amount being given away as promotion reductions
+// 📊 NEW ENGINE: Computes the exact monetary margin amount being given away
 const calculatedSavingsAmount = computed(() => {
   const basePrice = Number(form.value.price) || 0
   return Math.max(basePrice - calculatedFinalPrice.value, 0)
 })
 
-onMounted(async () => {
-  const semanticSlugToken = route.params.id
-  if (semanticSlugToken && semanticSlugToken !== 'new') {
-    isEditing.value = true
-    
-    // 🚨 RE-ENGINEERED: Retrieve target Firestore ID mapping string safely from cache dictionary records
-    const sessionDocId = window.sessionStorage.getItem(`slug_map_${semanticSlugToken}`)
-    if (!sessionDocId) {
-      alert('Security Exception: Untrusted signature string detected or administrative token session expired.')
-      router.push('/admin')
+onMounted(() => {
+  // Wait for Firebase Auth to confirm admin is logged in
+  auth.onAuthStateChanged(async (user) => {
+    if (!user) {
+      router.push('/login')
       return
     }
-    
-    rawId.value = sessionDocId
-    try {
-      const productData = await fetchProductById(sessionDocId)
-      if (productData) {
-        form.value = {
-          ...getDefaultForm(),
-          ...productData,
-          discount: productData.discount || { isDiscounted: false, percent: 0 },
-          imageUrls: productData.imageUrls?.length ? [...productData.imageUrls] : [''],
-          benefits: productData.benefits?.length ? [...productData.benefits] : [''],
-          ingredients: productData.ingredients?.length ? [...productData.ingredients] : [''],
-          tags: productData.tags?.length ? [...productData.tags] : [''],
+
+    const productId = route.params.id
+    if (productId && productId !== 'new') {
+      isEditing.value = true
+      rawId.value = productId // Direct ID assignment, no session storage hacks!
+      
+      try {
+        // Direct database fetch. No signature string errors anymore!
+        const productData = await fetchProductById(productId)
+        if (productData) {
+          form.value = {
+            ...getDefaultForm(),
+            ...productData,
+            discount: productData.discount || { isDiscounted: false, percent: 0 },
+            imageUrls: productData.imageUrls?.length ? [...productData.imageUrls] : [''],
+            benefits: productData.benefits?.length ? [...productData.benefits] : [''],
+            ingredients: productData.ingredients?.length ? [...productData.ingredients] : [''],
+            tags: productData.tags?.length ? [...productData.tags] : [''],
+          }
         }
+      } catch (e) { 
+        console.error("Error fetching product details: ", e) 
       }
-    } catch (e) { console.error(e) }
-  }
-  initializing.value = false
+    }
+    initializing.value = false
+  })
 })
 
 const addArrayItem = (field) => form.value[field].push('')
@@ -90,7 +100,11 @@ const handleSubmit = async () => {
     if (isEditing.value) { await updateProduct(rawId.value, payload) } 
     else { await addProduct(payload) }
     router.push('/admin')
-  } catch (e) { alert('Error saving data mapping: ' + e.message) } finally { saving.value = false }
+  } catch (e) { 
+    alert('Error saving data mapping: ' + e.message) 
+  } finally { 
+    saving.value = false 
+  }
 }
 </script>
 
@@ -130,7 +144,6 @@ const handleSubmit = async () => {
           <div class="input-group toggle-box"><label>Activate Active Discount Rules</label><input type="checkbox" v-model="form.discount.isDiscounted" /></div>
           <div class="input-group" v-if="form.discount.isDiscounted"><label>Deduction Percentage (%)</label><input v-model="form.discount.percent" type="number" min="0" max="100" /></div>
           
-          <!-- 📊 NEW COMPONENT VIEWPORT STRIP SHOWING THE INVERSE CALCULATION MATH LIVE -->
           <div class="full-width dynamic-math-display-panel" v-if="form.price > 0">
             <div class="math-panel-title">🧮 Live Promotion Calculation Verification</div>
             <div class="math-grid-summary">
@@ -198,7 +211,14 @@ const handleSubmit = async () => {
 </template>
 
 <style scoped>
-.form-workspace-page { min-height: 100vh; background-color: #f1f5f9; padding: 40px 20px; box-sizing: border-box; font-family: system-ui, sans-serif; }
+/* 🚀 FIXED: Added padding-top: 100px so it stays clear of the global NavBar */
+.form-workspace-page { 
+  min-height: 100vh; 
+  background-color: #f1f5f9; 
+  padding: 100px 20px 40px; 
+  box-sizing: border-box; 
+  font-family: system-ui, sans-serif; 
+}
 .loading-state { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 60vh; color: #475569; }
 .spinner { width: 40px; height: 40px; border: 4px solid #cbd5e1; border-top-color: #15803d; border-radius: 50%; animation: rot .8s linear infinite; }
 @keyframes rot { to { transform: rotate(360deg); } }
