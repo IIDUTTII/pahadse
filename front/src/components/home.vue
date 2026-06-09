@@ -79,7 +79,15 @@ const primaryImage = (p) => p.imageUrls?.find(u => u?.trim()) ?? null
   <div class="page">
     <div class="hero">
       <div class="hero-badge">🌿 100% Natural | Handmade in Himalayas</div>
-      <h1 class="hero-title">Pure Mountain Goodness,<br>Delivered to Your Door</h1>
+     <h1 class="hero-title">
+    Pure Mountain Goodness,<br>
+    Delivered to Your Door
+</h1>
+
+<p style="color: red; font-weight: bold;">
+    ⚠ Warning: This website is currently in a testing phase. All products shown are for demonstration purposes only and are not real products.
+</p>
+      
       <p class="hero-sub">No preservatives · Ethically sourced · Plastic‑free packaging</p>
       <div class="hero-stats">
         <span>🏔️ Free shipping over ₹499</span>
