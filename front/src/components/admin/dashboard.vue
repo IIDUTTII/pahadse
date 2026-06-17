@@ -15,6 +15,8 @@ import SupportTab from './SupportTab.vue'
 import AuditLogsTab from './AuditLogsTab.vue'
 import SettingsTab from './SettingsTab.vue'
 import AnalyticsTab from './AnalyticsTab.vue'
+import newtab from './newtab.vue'
+
 
 defineOptions({ name: 'AdminDashboard' })
 const router = useRouter()
@@ -85,6 +87,8 @@ const handleLogout = async () => {
   }
 }
 
+
+
 const setTab = (tab) => { 
   activeTab.value = tab; 
   sidebarOpen.value = false; 
@@ -124,6 +128,7 @@ const setTab = (tab) => {
         <button :class="['nav-btn', { active: activeTab === 'support' }]" @click="setTab('support')">💬 Support Desk</button>
         <button :class="['nav-btn', { active: activeTab === 'users' }]" @click="setTab('users')">👥 Users</button>
         <button :class="['nav-btn', { active: activeTab === 'settings' }]" @click="setTab('settings')">⚙️ Settings</button>
+        <button :class="['nav-btn',{active: activeTab==='newtab'}]" @click="setTab('newtab')">🆕 New Tab</button>
       </div>
       
       <div v-if="userRole === 'superadmin'" class="nav-group">
@@ -164,8 +169,8 @@ const setTab = (tab) => {
         <UsersTab v-if="activeTab === 'users'" :user-role="userRole" />
         <SettingsTab v-if="activeTab === 'settings'" :user-role="userRole" />
         <AuditLogsTab v-if="activeTab === 'auditLogs'" />
+        <NewTab v-if="activeTab === 'newtab'" />
       </main>
-
     </div>
   </div>
 </template>

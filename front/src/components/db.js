@@ -209,7 +209,16 @@ export function subscribeToProductsPaginated(limitCount, cb) {
 export async function fetchActiveProducts() {
   const q = query(collection(db, 'products'), where('isActive', '==', true))
   const snap = await getDocs(q)
-  return snap.docs.map(d => ({ id: d.id, ...d.data() }))
+  const products = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+  
+  // ✨ Sort by Admin Priority Order (1 comes first, if no priority, goes to bottom)
+  products.sort((a, b) => {
+    const orderA = a.priorityOrder || 9999
+    const orderB = b.priorityOrder || 9999
+    return orderA - orderB
+  })
+  
+  return products
 }
 
 export async function fetchAllProducts() {
@@ -303,6 +312,9 @@ export async function deleteProduct(productId) {
 // ─────────────────────────────────────────────────────────────────────────────
 // 🛒 CART & CHECKOUT SYSTEMS
 // ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// 🛒 CART & CHECKOUT SYSTEMS
+// ─────────────────────────────────────────────────────────────────────────────
 
 export async function fetchCart() {
   const user = auth.currentUser
@@ -320,30 +332,58 @@ export function bustCartCache() {
   if (user) _cartCache.delete(user.uid)
 }
 
-export async function isProductInCart(productId) {
+// ✨ STRICT CHECK: Matches exactly Product ID + Variant
+export async function isVariantInCart(productId, variantLabel) {
   const items = await fetchCart()
-  return items.some(i => i.productId === productId)
+  const checkLabel = variantLabel || 'Standard'
+  return items.some(i => {
+     const existingVar = i.variant || i.weight || 'Standard';
+     return i.productId === productId && existingVar === checkLabel;
+  })
 }
 
-export async function addProductToCart(product, finalPrice) {
+// ✨ FIX: Never merges different variants. Each gets a unique row.
+export async function addProductToCart(product, finalPrice, selectedVariant = null, quantity = 1) {
   const user = auth.currentUser
   if (!user) throw new Error('NOT_LOGGED_IN')
 
   const slug = product.name ? product.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '') : 'product'
   const primaryImg = (product.imageUrls && product.imageUrls.length > 0) ? product.imageUrls[0] : null
+  
+  const variantLabel = selectedVariant ? selectedVariant.label : (product.weight || 'Standard')
+  // Creates a strictly unique ID for the cart row
+  const cartItemId = `${product.id}_${variantLabel.replace(/[^a-zA-Z0-9]/g, '')}`
 
   const cartRef = doc(db, 'carts', user.uid)
-  await setDoc(cartRef, {
-    items: arrayUnion({
-      productId : product.id,
-      name      : product.name,
-      price     : Number(finalPrice),
-      emoji     : product.emoji || '📦',
-      imageUrl  : primaryImg,
-      slug      : slug,
-      quantity  : 1,
-    }),
-  }, { merge: true })
+  const snap = await getDoc(cartRef)
+  const data = snap.exists() ? snap.data() : { items: [] }
+  const items = data.items || []
+
+  // Check if EXACT variant is already in cart
+  const existingIdx = items.findIndex(i => {
+     const existingVar = i.variant || i.weight || 'Standard';
+     return i.productId === product.id && existingVar === variantLabel;
+  })
+
+  if (existingIdx > -1) {
+     // If same variant exists, just increase quantity
+     items[existingIdx].quantity += quantity
+     await setDoc(cartRef, { items }, { merge: true })
+  } else {
+     // If it's a NEW variant, create a totally separate row!
+     items.push({
+       cartItemId: cartItemId,
+       productId : product.id,
+       name      : product.name,
+       variant   : variantLabel,
+       price     : Number(finalPrice),
+       emoji     : product.emoji || '📦',
+       imageUrl  : primaryImg,
+       slug      : slug,
+       quantity  : quantity,
+     })
+     await setDoc(cartRef, { items }, { merge: true })
+  }
 
   bustCartCache()
 }
@@ -355,6 +395,40 @@ export async function saveCartItems(updatedItems) {
   await setDoc(cartRef, { items: updatedItems }, { merge: true })
   bustCartCache()
 }
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ⭐ PRODUCT REVIEWS (UPDATED LOGIC)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const canUserReviewProduct = async (productId) => {
+  const user = auth.currentUser;
+  if (!user) return false;
+  
+  try {
+    // Check all orders of this user that are marked as 'delivered'
+    const q = query(
+      collection(db, 'orders'), 
+      where('userId', '==', user.uid), 
+      where('shippingStatus', '==', 'delivered')
+    );
+    const snap = await getDocs(q);
+    
+    // Check if the specific productId exists in any of those delivered orders
+    for (const d of snap.docs) {
+      const order = d.data();
+      if (order.items && order.items.some(item => item.productId === productId)) {
+        return true;
+      }
+    }
+    return false;
+  } catch (error) {
+    console.error("Verification error:", error);
+    return false;
+  }
+}
+
+
 
 export const addNewUserAddress = async (addressData) => {
   const user = auth.currentUser
@@ -618,6 +692,16 @@ export const addProductReview = async (productId, rating, comment) => {
     })
   } catch (error) {
     console.error("Failed submitting user review:", error)
+    throw error
+  }
+}
+
+// Add this under addProductReview in db.js
+export const deleteProductReview = async (reviewId) => {
+  try {
+    await deleteDoc(doc(db, 'reviews', reviewId))
+  } catch (error) {
+    console.error("Error deleting review:", error)
     throw error
   }
 }

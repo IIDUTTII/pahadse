@@ -1,10 +1,9 @@
 <script setup>
-// checkout.vue ka STARTING part replace karo
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { db, auth } from '../firebase.js'
 import { doc, onSnapshot, getDoc } from 'firebase/firestore'
-import { createCustomerOrderDocument, fetchShippingConfig } from './db.js' // ✨ ADDED fetchShippingConfig
+import { createCustomerOrderDocument, fetchShippingConfig } from './db.js'
 
 defineOptions({ name: 'Checkout' })
 const router = useRouter()
@@ -13,8 +12,6 @@ const cartItems = ref([]), loading = ref(true), userAccountData = ref(null), pro
 const isCodGloballyActive = ref(true), selectedAddressId = ref(''), selectedPaymentMethod = ref('online')
 const appliedPromoCode = ref(window.sessionStorage.getItem('active_promo_code') || null)
 const appliedPromoDiscount = ref(Number(window.sessionStorage.getItem('active_promo_discount')) || 0)
-
-// ✨ NEW: Dynamic Shipping State
 const shippingConfig = ref({ fee: 60, freeThreshold: 499, isFreeShippingActive: true })
 
 onMounted(() => {
@@ -39,7 +36,6 @@ onMounted(() => {
       const configSnap = await getDoc(doc(db, 'systemConfig', 'gateways'))
       if (configSnap.exists()) isCodGloballyActive.value = configSnap.data().isCodActive
       
-      // ✨ FETCH SHIPPING SETTINGS
       const shipCfg = await fetchShippingConfig()
       if (shipCfg) shippingConfig.value = shipCfg
     } catch (e) { console.warn(e.message) }
@@ -48,7 +44,6 @@ onMounted(() => {
 
 const subtotal = computed(() => cartItems.value.reduce((s, i) => s + i.price * i.quantity, 0))
 
-// ✨ NEW: Dynamic Shipping Math
 const shippingCost = computed(() => {
   if (subtotal.value === 0) return 0
   if (shippingConfig.value.isFreeShippingActive && subtotal.value >= shippingConfig.value.freeThreshold) return 0
@@ -56,7 +51,6 @@ const shippingCost = computed(() => {
 })
 
 const grandTotal = computed(() => Math.max(subtotal.value - appliedPromoDiscount.value + shippingCost.value, 0))
-
 
 const activeAddressesList = computed(() => userAccountData.value?.addresses || [])
 const activeSelectedAddressObject = computed(() => activeAddressesList.value.find(a => a.id === selectedAddressId.value))
@@ -74,10 +68,10 @@ const processCheckoutSubmission = async () => {
       phone: target.phone,
       address: `${target.streetAddress}, ${target.city}, ${target.state} - ${target.pincode}`,
       
-      // ✨ PASSING IMAGE & SLUG INTO FINAL ORDER
       items: cartItems.value.map(i => ({ 
         productId: i.productId, 
         name: i.name, 
+        variant: i.variant || i.weight || 'Standard Option',
         quantity: i.quantity, 
         price: i.price, 
         emoji: i.emoji || '📦',
@@ -103,7 +97,7 @@ const processCheckoutSubmission = async () => {
     window.sessionStorage.removeItem('active_promo_code')
 
     alert(`Order Registered Successfully! ID: ${orderId}`)
-    router.push('/user') // Usually goes to /orders but you can adjust
+    router.push('/user') 
   } catch (error) {
     alert("Operation aborted: " + error.message)
   } finally { processingOrder.value = false }
@@ -162,7 +156,7 @@ const processCheckoutSubmission = async () => {
           <div class="summary-divider-line"></div>
           
           <div class="checkout-read-only-basket-list">
-            <div v-for="item in cartItems" :key="item.productId" class="summary-item-row-strip">
+            <div v-for="(item, idx) in cartItems" :key="idx" class="summary-item-row-strip">
               <div class="item-visual-meta">
                 
                 <div class="item-thumb-mini">
@@ -172,6 +166,7 @@ const processCheckoutSubmission = async () => {
 
                 <div class="item-names-block">
                   <strong class="item-lbl-name">{{ item.name }}</strong>
+                  <span class="item-lbl-variant">{{ item.variant || item.weight || 'Standard' }}</span>
                   <span class="item-lbl-qty">Batch Qty: {{ item.quantity }} units</span>
                 </div>
               </div>
@@ -236,19 +231,17 @@ const processCheckoutSubmission = async () => {
 .checkout-read-only-basket-list { display: flex; flex-direction: column; gap: 14px; max-height: 300px; overflow-y: auto; }
 .summary-item-row-strip { display: flex; justify-content: space-between; align-items: center; }
 .item-visual-meta { display: flex; align-items: center; gap: 12px; }
-
-/* ✨ CHECKOUT IMAGE STYLING */
 .item-thumb-mini { font-size: 1.8rem; background-color: #fafafa; border: 1px solid #e5e7eb; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; border-radius: 6px; overflow: hidden; flex-shrink: 0; }
 .checkout-item-img { width: 100%; height: 100%; object-fit: cover; }
-
 .item-names-block { display: flex; flex-direction: column; }
 .item-lbl-name { font-size: 0.95rem; font-weight: 800; }
+.item-lbl-variant { font-size: 0.8rem; color: #4B5563; font-weight: 600; text-transform: uppercase; margin-top: 2px; }
 .item-lbl-qty { font-size: 0.78rem; color: #6b7280; margin-top: 2px; }
 .item-line-calc-price { font-size: 1.05rem; font-weight: 900; }
 .calc-ledger-line { display: flex; justify-content: space-between; font-size: 0.95rem; color: #4b5563; margin-bottom: 10px; }
 .free-badge { color: #16a34a; font-weight: 800; }
 .total-highlight-row { font-size: 1.3rem; font-weight: 900; margin-top: 6px; }
-.checkout-finalize-submit-cta-btn { width: 100%; padding: 16px; background-color: #111827; color: #FAF6F0; border: none; border-radius: 30px; font-size: 0.95rem; font-weight: 800; cursor: pointer; text-transform: uppercase; margin-top: 14px; }
+.checkout-finalize-submit-cta-btn { width: 100%; padding: 16px; background-color: #111827; color: #FAF6F0; border: none; border-radius: 30px; font-size: 0.95rem; font-weight: 800; cursor: pointer; text-transform: uppercase; margin-top: 14px; transition: 0.2s; }
 .checkout-finalize-submit-cta-btn:hover:not(:disabled) { background-color: #16a34a; }
 .checkout-finalize-submit-cta-btn:disabled { opacity: 0.7; cursor: not-allowed; }
 .fade-in { animation: fIn 0.3s ease-out; }
