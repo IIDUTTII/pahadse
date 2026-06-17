@@ -155,8 +155,10 @@ const primaryImage = (p) => p.imageUrls?.find(u => u?.trim()) ?? null
 @media (max-width: 1024px) { .product-grid { grid-template-columns: repeat(3, 1fr); gap: 24px; } .hero-title { font-size: 32px; } }
 @media (max-width: 768px) { 
   .page { padding: 80px 16px 90px; } 
+  .rosier-focused-display-box { border-radius: 12px; }
   .product-grid { grid-template-columns: repeat(2, 1fr); gap: 14px; } 
   .hero-title { font-size: 26px; } 
+  .focused-image-aspect { height: 450px; aspect-ratio: unset; }
   .product-thumb { height: 200px; } 
   .product-name { font-size: 16px; }
 }
