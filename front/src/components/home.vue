@@ -104,7 +104,6 @@ const primaryImage = (p) => p.imageUrls?.find(u => u?.trim()) ?? null
     </div>
   </div>
 </template>
-
 <style scoped>
 .page {
   --footer-green: #0F2A1F; --footer-green-light: #2A5C3E; --gold: #C9A96E;
@@ -135,8 +134,23 @@ const primaryImage = (p) => p.imageUrls?.find(u => u?.trim()) ?? null
 .corner-badge { position: absolute; top: 14px; left: 14px; z-index: 2; font-size: 11px; font-weight: 700; padding: 5px 14px; border-radius: 40px; letter-spacing: 0.5px; }
 .corner-badge.discount { background: var(--gold); color: var(--footer-green); }
 
-.product-thumb { height: 260px; background: #FEFCF5; display: flex; align-items: center; justify-content: center; overflow: hidden; border-bottom: 1px solid #F0F2E8; }
-.thumb-img { width: 100%; height: 100%; object-fit: cover; }
+/* ✨ PERFECT SQUARE & NO CROP LOGIC */
+.product-thumb { 
+  width: 100%; 
+  aspect-ratio: 1 / 1; 
+  height: auto; 
+  background: #FEFCF5; 
+  display: flex; 
+  align-items: center; 
+  justify-content: center; 
+  overflow: hidden; 
+  border-bottom: 1px solid #F0F2E8; 
+}
+.thumb-img { 
+  width: 100%; 
+  height: 100%; 
+  object-fit: contain; 
+}
 .emoji-fallback { font-size: 64px; }
 
 .product-body { padding: 16px; flex: 1; display: flex; flex-direction: column; }
@@ -152,15 +166,15 @@ const primaryImage = (p) => p.imageUrls?.find(u => u?.trim()) ?? null
 .load-more-container { text-align: center; margin-top: 40px; }
 .load-more-btn { background: transparent; border: 2px solid var(--footer-green-light); color: var(--footer-green-light); padding: 12px 30px; border-radius: 40px; font-size: 14px; font-weight: 600; cursor: pointer; }
 
-@media (max-width: 1024px) { .product-grid { grid-template-columns: repeat(3, 1fr); gap: 24px; } .hero-title { font-size: 32px; } }
+@media (max-width: 1024px) { 
+  .product-grid { grid-template-columns: repeat(3, 1fr); gap: 24px; } 
+  .hero-title { font-size: 32px; } 
+}
+
 @media (max-width: 768px) { 
   .page { padding: 80px 16px 90px; } 
-  .rosier-focused-display-box { border-radius: 12px; }
   .product-grid { grid-template-columns: repeat(2, 1fr); gap: 14px; } 
   .hero-title { font-size: 26px; } 
-  .focused-image-aspect { height: 450px; aspect-ratio: unset; }
-  .product-thumb { height: 200px; } 
   .product-name { font-size: 16px; }
 }
-@media (max-width: 480px) { .product-thumb { height: 180px; } }
 </style>
