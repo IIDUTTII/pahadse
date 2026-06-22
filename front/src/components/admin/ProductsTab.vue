@@ -1,9 +1,7 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { db } from '../../firebase.js'
-// ✨ FIXED: Removed orderBy from import as we don't need it for legacy products
-import { collection, query, limit, onSnapshot, doc, updateDoc, deleteDoc } from 'firebase/firestore'
+import { subscribeToProductsLimited, toggleProductActive, deleteProduct } from '../db.js'
 
 const props = defineProps({ userRole: { type: String, default: 'user' } })
 const router = useRouter()
@@ -13,13 +11,10 @@ const products = ref([])
 const loadLimit = ref(6) 
 let _unsubProducts = null
 
-// ✨ FIXED PAGINATION LOGIC: 
-// Removed orderBy('createdAt') so older products without timestamps still load perfectly!
 watch(loadLimit, (newLimit) => {
   if (_unsubProducts) _unsubProducts()
   
-  const q = query(collection(db, 'products'), limit(newLimit))
-  _unsubProducts = onSnapshot(q, snap => {
+  _unsubProducts = subscribeToProductsLimited(newLimit, snap => {
     products.value = snap.docs.map(d => ({ id: d.id, ...d.data() }))
   })
 }, { immediate: true })
@@ -47,12 +42,11 @@ const handleToggle = async (p) => {
 
   const actionText = p.isActive ? "HIDE this product from the public store" : "PUBLISH this product to the public store"
   if (!confirm(`⚠️ SECURITY WARNING: Are you sure you want to ${actionText}?`)) {
-    return // User cancelled
+    return 
   }
 
   try {
-    const newStatus = !p.isActive
-    await updateDoc(doc(db, 'products', p.id), { isActive: newStatus })
+    await toggleProductActive(p.id, p.isActive)
   } catch(e) {
     alert("Error changing status: " + e.message)
   }
@@ -61,7 +55,7 @@ const handleToggle = async (p) => {
 const handleDelete = async (id) => {
   if (!confirm('Are you sure you want to permanently delete this product?')) return
   try {
-    await deleteDoc(doc(db, 'products', id))
+    await deleteProduct(id)
   } catch(e) {
     alert("Error deleting product: " + e.message)
   }
@@ -126,8 +120,10 @@ const handleDelete = async (id) => {
 .search-input { padding: 10px 14px; border: 1px solid #CBD5E1; border-radius: 8px; outline: none; font-family: inherit; font-size: 0.9rem; }
 .search-input:focus { border-color: #0F2A1F; }
 .btn-primary { background: #0F2A1F; color: white; padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; font-weight: 700; white-space: nowrap; }
-.table-wrap { background: #FFFFFF; border-radius: 12px; border: 1px solid #E2E8F0; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.02); }
-.data-table { width: 100%; border-collapse: collapse; text-align: left; }
+
+/* ✨ MOBILE COMPATIBILITY: Overflow settings */
+.table-wrap { background: #FFFFFF; border-radius: 12px; border: 1px solid #E2E8F0; overflow-x: auto; box-shadow: 0 4px 6px rgba(0,0,0,0.02); }
+.data-table { width: 100%; border-collapse: collapse; text-align: left; min-width: 800px; /* Forces scroll on small screens */ }
 .data-table th { background: #F8FAFC; padding: 16px; font-size: 0.85rem; font-weight: 800; text-transform: uppercase; color: #475569; border-bottom: 2px solid #E2E8F0; }
 .data-table td { padding: 16px; border-bottom: 1px solid #E2E8F0; color: #0F172A; vertical-align: middle; }
 
@@ -142,12 +138,10 @@ const handleDelete = async (id) => {
 .status-pill { padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 800; text-transform: uppercase; }
 .pill-green { background: #DCFCE7; color: #15803D; border: 1px solid #BBF7D0; }
 .pill-amber { background: #FEF3C7; color: #92400E; border: 1px solid #FDE68A; }
-.row-actions { display: flex; gap: 8px; }
+.row-actions { display: flex; gap: 8px; flex-wrap: nowrap; }
 
-.btn-outline { background: #ffffff; color: #0f172a; border: 1px solid #cbd5e1; padding: 6px 12px; border-radius: 6px; font-weight: 700; cursor: pointer; }
+.btn-outline { background: #ffffff; color: #0f172a; border: 1px solid #cbd5e1; padding: 6px 12px; border-radius: 6px; font-weight: 700; cursor: pointer; white-space: nowrap; }
 .btn-outline:hover { border-color: #0F2A1F; background: #f8fafc; }
-
-/* ✨ NEW DISABLED BUTTON STYLING */
 .disabled-btn { opacity: 0.5; cursor: not-allowed; border-color: #cbd5e1 !important; color: #94a3b8 !important; background: #f1f5f9; }
 
 .btn-edit { background: #F1F5F9; color: #0F172A; border: 1px solid #CBD5E1; padding: 6px 12px; border-radius: 6px; font-weight: 700; cursor: pointer; }

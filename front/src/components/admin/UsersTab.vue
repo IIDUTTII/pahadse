@@ -1,12 +1,16 @@
 <script setup>
 import { ref, onMounted } from 'vue'
-import { fetchAllUsersFromDb, updateUserRoleInDb } from '../db.js'
+import { fetchAllUsersFromDb, updateUserRoleInDb, addUserNote, fetchUserNotes, requestUserDisabledChange } from '../db.js'
 
 const props = defineProps({
   userRole: { type: String, default: 'user' }
 })
 
 const usersList = ref([])
+const selectedUser = ref(null)
+const userNotes = ref([])
+const newNote = ref('')
+const noteBusy = ref(false)
 
 // Modal States
 const showRoleModal = ref(false)
@@ -39,6 +43,52 @@ const closeRoleModal = () => {
   roleModalRole.value = 'user'
 }
 
+
+const openUserDetail = async (u) => {
+  selectedUser.value = u
+  newNote.value = ''
+  userNotes.value = await fetchUserNotes(u.id)
+}
+
+const saveNote = async () => {
+  if (!selectedUser.value || !newNote.value.trim()) return
+  noteBusy.value = true
+  try {
+    await addUserNote(selectedUser.value.id, newNote.value)
+    newNote.value = ''
+    userNotes.value = await fetchUserNotes(selectedUser.value.id)
+  } catch (e) {
+    alert(e.message)
+  } finally {
+    noteBusy.value = false
+  }
+}
+
+const toggleBan = async (u) => {
+  const next = !u.disabled
+  if (!confirm(`${next ? 'Ban' : 'Unban'} ${u.email || u.id}?`)) return
+  try {
+    await requestUserDisabledChange(u.id, next)
+    u.disabled = next
+    if (selectedUser.value?.id === u.id) selectedUser.value.disabled = next
+  } catch (e) {
+    alert(e.message)
+  }
+}
+
+const escapeCsv = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`
+const exportUsersCsv = () => {
+  const header = ['UID', 'Name', 'Email', 'Role', 'Disabled']
+  const rows = usersList.value.map(u => [u.id, u.displayName, u.email, u.role || 'user', !!u.disabled].map(escapeCsv).join(','))
+  const blob = new Blob([[header.map(escapeCsv).join(','), ...rows].join('\n')], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `users-${new Date().toISOString().slice(0,10)}.csv`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 const confirmRoleChange = async () => {
   if (!roleModalUser.value) return
   roleModalBusy.value = true
@@ -61,20 +111,22 @@ const confirmRoleChange = async () => {
         <h2 class="ws-title">Users List</h2>
         <p class="ws-sub">{{ usersList.length }} registered accounts</p>
       </div>
+      <button class="btn-export" @click="exportUsersCsv">Export CSV</button>
     </div>
 
     <div class="table-wrap desktop-only">
       <table class="data-table">
         <thead>
-          <tr><th>Name / UID</th><th>Email</th><th>Current Role</th><th>Modify Permissions</th></tr>
+          <tr><th>Name / UID</th><th>Email</th><th>Status</th><th>Current Role</th><th>Modify Permissions</th></tr>
         </thead>
         <tbody>
-          <tr v-for="u in usersList" :key="u.id">
+          <tr v-for="u in usersList" :key="u.id" @click="openUserDetail(u)" class="clickable">
             <td>
               <div class="item-name">{{ u.displayName || 'Pahari User' }}</div>
               <code class="id-code">{{ u.id?.substring(0, 8) }}…</code>
             </td>
             <td class="item-sub">{{ u.email }}</td>
+            <td><span :class="['role-pill', u.disabled ? 'role-super' : 'role-user']">{{ u.disabled ? 'banned' : 'active' }}</span></td>
             <td>
               <span :class="['role-pill', u.role === 'superadmin' ? 'role-super' : u.role === 'admin' ? 'role-admin' : 'role-user']">
                 {{ u.role || 'user' }}
@@ -82,9 +134,10 @@ const confirmRoleChange = async () => {
             </td>
             <td>
               <div v-if="userRole === 'superadmin'" class="row-actions">
-                <button class="btn-role" @click="openRoleModal(u, 'user')">User</button>
-                <button class="btn-role" @click="openRoleModal(u, 'admin')">Admin</button>
-                <button class="btn-role" @click="openRoleModal(u, 'superadmin')">Super</button>
+                <button class="btn-role" @click.stop="openRoleModal(u, 'user')">User</button>
+                <button class="btn-role" @click.stop="openRoleModal(u, 'admin')">Admin</button>
+                <button class="btn-role" @click.stop="openRoleModal(u, 'superadmin')">Super</button>
+                <button class="btn-role danger" @click.stop="toggleBan(u)">{{ u.disabled ? 'Unban' : 'Ban' }}</button>
               </div>
               <span v-else class="item-sub">🔒 Not Authorized</span>
             </td>
@@ -94,7 +147,7 @@ const confirmRoleChange = async () => {
     </div>
 
     <div class="user-cards mobile-only">
-      <div v-for="u in usersList" :key="u.id" class="u-card">
+      <div v-for="u in usersList" :key="u.id" class="u-card" @click="openUserDetail(u)">
         <div class="u-name">{{ u.displayName || 'Pahari User' }}</div>
         <div class="u-email">{{ u.email }}</div>
         <div class="u-row">
@@ -102,9 +155,10 @@ const confirmRoleChange = async () => {
             {{ u.role || 'user' }}
           </span>
           <div v-if="userRole === 'superadmin'" class="role-btns">
-            <button class="btn-role" @click="openRoleModal(u, 'user')">User</button>
-            <button class="btn-role" @click="openRoleModal(u, 'admin')">Admin</button>
-            <button class="btn-role" @click="openRoleModal(u, 'superadmin')">Super</button>
+            <button class="btn-role" @click.stop="openRoleModal(u, 'user')">User</button>
+            <button class="btn-role" @click.stop="openRoleModal(u, 'admin')">Admin</button>
+            <button class="btn-role" @click.stop="openRoleModal(u, 'superadmin')">Super</button>
+                <button class="btn-role danger" @click.stop="toggleBan(u)">{{ u.disabled ? 'Unban' : 'Ban' }}</button>
           </div>
         </div>
       </div>
@@ -154,6 +208,38 @@ const confirmRoleChange = async () => {
         </div>
       </div>
     </Teleport>
+
+    <Teleport to="body">
+      <div v-if="selectedUser" class="overlay" @click.self="selectedUser = null">
+        <div class="modal user-modal">
+          <div class="modal-head">
+            <div>
+              <p class="eyebrow">Customer Profile</p>
+              <h3>{{ selectedUser.displayName || 'Pahari User' }}</h3>
+            </div>
+            <button class="icon-btn" @click="selectedUser = null" aria-label="Close">✕</button>
+          </div>
+          <div class="modal-body">
+            <div class="profile-grid">
+              <div><span>Email</span><strong>{{ selectedUser.email || '—' }}</strong></div>
+              <div><span>Role</span><strong>{{ selectedUser.role || 'user' }}</strong></div>
+              <div><span>Status</span><strong>{{ selectedUser.disabled ? 'Banned' : 'Active' }}</strong></div>
+            </div>
+
+            <div class="notes-box">
+              <h4>Support Notes</h4>
+              <div v-if="userNotes.length === 0" class="item-sub">No notes yet.</div>
+              <div v-for="note in userNotes" :key="note.id" class="note-row">
+                <p>{{ note.text }}</p>
+                <span>{{ note.createdByEmail || note.createdBy || 'admin' }}</span>
+              </div>
+              <textarea v-model="newNote" placeholder="Add internal customer support note..."></textarea>
+              <button class="btn primary" :disabled="noteBusy" @click="saveNote">{{ noteBusy ? 'Saving...' : 'Add Note' }}</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -161,7 +247,7 @@ const confirmRoleChange = async () => {
 /* TAB STYLES */
 .fade-in { animation: fIn 0.3s ease-out; }
 @keyframes fIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
-.ws-head { margin-bottom: 24px; }
+.ws-head { margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .ws-title { font-size: 1.6rem; font-weight: 800; color: #0F172A; margin: 0; }
 .ws-sub { color: #64748B; font-size: 0.9rem; margin-top: 4px; }
 .table-wrap { background: #FFFFFF; border-radius: 12px; border: 1px solid #E2E8F0; box-shadow: 0 4px 6px rgba(0,0,0,0.02); }
@@ -178,6 +264,10 @@ const confirmRoleChange = async () => {
 .row-actions { display: flex; gap: 6px; }
 .btn-role { background: #FFFFFF; border: 1px solid #CBD5E1; padding: 6px 12px; border-radius: 6px; font-weight: 700; cursor: pointer; color: #0F172A; transition: 0.2s; }
 .btn-role:hover { border-color: #0F2A1F; color: #0F2A1F; background: #F8FAFC; }
+.btn-role.danger { color: #DC2626; border-color: #FECACA; background: #FEF2F2; }
+.btn-export { background: #0F2A1F; color: #fff; border: none; border-radius: 8px; padding: 10px 14px; font-weight: 800; cursor: pointer; }
+.clickable { cursor: pointer; }
+.clickable:hover { background: #F8FAFC; }
 
 .desktop-only { display: block; }
 .mobile-only { display: none; }
@@ -200,6 +290,17 @@ const confirmRoleChange = async () => {
 .icon-btn { border: none; background: transparent; cursor: pointer; font-size: 1.1rem; color: #64748B; border-radius: 8px; padding: 6px 10px; transition: 0.2s; }
 .icon-btn:hover { background: #FEE2E2; color: #DC2626; }
 .modal-body { padding: 24px; display: flex; flex-direction: column; gap: 20px; }
+.user-modal { max-width: 640px; }
+.profile-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+.profile-grid div { border: 1px solid #E2E8F0; border-radius: 10px; padding: 12px; background: #F8FAFC; display: flex; flex-direction: column; gap: 4px; }
+.profile-grid span { font-size: 0.75rem; font-weight: 800; text-transform: uppercase; color: #64748B; }
+.profile-grid strong { color: #0F172A; word-break: break-word; }
+.notes-box { display: flex; flex-direction: column; gap: 10px; }
+.notes-box h4 { margin: 0; color: #0F172A; }
+.notes-box textarea { min-height: 90px; resize: vertical; border: 1px solid #CBD5E1; border-radius: 8px; padding: 12px; font-family: inherit; }
+.note-row { border: 1px solid #E2E8F0; border-radius: 10px; padding: 10px 12px; background: #FFFFFF; }
+.note-row p { margin: 0 0 4px; color: #0F172A; }
+.note-row span { color: #64748B; font-size: 0.78rem; font-weight: 700; }
 .msg { margin: 0; color: #334155; line-height: 1.5; font-size: 1rem; }
 .muted { color: #64748B; }
 .compare { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }

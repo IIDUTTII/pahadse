@@ -1,10 +1,8 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { auth, storage, db } from '../firebase.js'
-import { doc, getDoc, updateDoc, addDoc, collection, serverTimestamp, getDocs } from 'firebase/firestore'
-import { uploadProductImage, fetchAllProductImages, deleteProductImage } from './db.js'
-import { ref as storageRef, getMetadata } from 'firebase/storage'
+import { auth } from '../firebase.js'
+import { uploadProductImage, fetchAllProductImages, deleteProductImage, fetchProductById, addProduct, updateProduct, fetchProductCategories, getStorageFileSizeLabel } from './db.js'
 
 defineOptions({ name: 'ProductForm' })
 const route = useRoute(), router = useRouter()
@@ -48,17 +46,15 @@ onMounted(() => {
     const productId = route.params.id
 
     try {
-        const snap = await getDocs(collection(db, 'products'));
-        const cats = new Set(snap.docs.map(d => d.data().category).filter(Boolean));
-        if(cats.size > 0) existingCategories.value = Array.from(cats);
+        const cats = await fetchProductCategories()
+        if(cats.length > 0) existingCategories.value = cats
     } catch(e) {}
 
     if (productId && productId !== 'new') {
       isEditing.value = true; rawId.value = productId
       try {
-        const snap = await getDoc(doc(db, 'products', productId))
-        if (snap.exists()) {
-          const p = snap.data()
+        const p = await fetchProductById(productId)
+        if (p) {
           form.value = {
             ...getDefaultForm(), ...p, discount: p.discount || { isDiscounted: false, percent: 0 },
             imageUrls: p.imageUrls || [], benefits: p.benefits?.length ? [...p.benefits] : [''],
@@ -68,10 +64,7 @@ onMounted(() => {
         const urls = await fetchAllProductImages(productId)
         for (const url of urls) {
            let realSize = 'Unknown Size'
-           try {
-             const meta = await getMetadata(storageRef(storage, url))
-             realSize = formatBytes(meta.size)
-           } catch(e){}
+           try { realSize = await getStorageFileSizeLabel(url) } catch(e){}
            storageImages.value.push({ url, note: `DB Size: ${realSize}` })
         }
       } catch (e) { console.error("Fetch Error: ", e) }
@@ -103,8 +96,8 @@ const handleLocalImageUpload = async (event) => {
       uploadStatusText.value = `Compressing ${i + 1}/${files.length}...`
       const url = await uploadProductImage(file, rawId.value) 
       form.value.imageUrls.push(url)
-      const meta = await getMetadata(storageRef(storage, url))
-      storageImages.value.push({ url, note: `DB Size: ${formatBytes(meta.size)}` })
+      const realSize = await getStorageFileSizeLabel(url)
+      storageImages.value.push({ url, note: `DB Size: ${realSize}` })
     } catch (error) { alert(`Upload failed: ${error.message}`) }
   }
   isUploadingImages.value = false; uploadStatusText.value = ''; event.target.value = ''
@@ -154,12 +147,12 @@ const handleSubmit = async () => {
     createdBy: form.value.createdBy, imageUrls: clean(form.value.imageUrls),
     benefits: clean(form.value.benefits), ingredients: clean(form.value.ingredients),
     tags: clean(form.value.tags), origin: form.value.origin, howToUse: form.value.howToUse, shelfLife: form.value.shelfLife,
-    variants: form.value.variants, updatedAt: serverTimestamp()
+    variants: form.value.variants, updatedAt: new Date()
   }
   
   try {
-    if (isEditing.value) { await updateDoc(doc(db, 'products', rawId.value), payload) } 
-    else { payload.createdAt = serverTimestamp(); await addDoc(collection(db, 'products'), payload) }
+    if (isEditing.value) { await updateProduct(rawId.value, payload) } 
+    else { await addProduct(payload) }
     router.push('/admin')
   } catch (e) { alert('Error saving: ' + e.message) } 
   finally { saving.value = false }

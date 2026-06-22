@@ -1,5 +1,6 @@
 <script setup>
 import { ref } from 'vue'
+import { createContactQuery } from './db.js'
 
 defineOptions({
   name: 'ContactView'
@@ -29,25 +30,27 @@ const handleContactSubmit = async () => {
   errorMessage.value = ''
   isSubmitting.value = true
 
-  // Simulate network request to Firestore/Backend
-  setTimeout(() => {
-    isSubmitting.value = false
-    successMessage.value = "Message sent successfully! Our mountain team will get back to you within 24 hours."
-    
-    // Reset form
-    formData.value = {
-      name: '',
-      email: '',
-      phone: '',
-      subject: '',
-      query: ''
-    }
+  try {
+    await createContactQuery({
+      name: formData.value.name.trim(),
+      email: formData.value.email.trim(),
+      phone: formData.value.phone.trim(),
+      subject: formData.value.subject.trim(),
+      query: formData.value.query.trim(),
+      source: 'contact_page'
+    })
 
-    // Clear success message after 5 seconds
+    successMessage.value = "Message sent successfully! Our team will get back to you within 24 hours."
+    formData.value = { name: '', email: '', phone: '', subject: '', query: '' }
+
     setTimeout(() => {
       successMessage.value = ''
     }, 5000)
-  }, 1500)
+  } catch (error) {
+    errorMessage.value = error.message || 'Could not send your message right now.'
+  } finally {
+    isSubmitting.value = false
+  }
 }
 </script>
 
@@ -69,7 +72,7 @@ const handleContactSubmit = async () => {
           <!-- Mountain Photo -->
           <div class="mountain-photo">
             <img 
-              src="https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=600&h=400&fit=crop" 
+              src="https://firebasestorage.googleapis.com/v0/b/pahadse-13309.firebasestorage.app/o/contact%2Fcontact1.jpg?alt=media&token=4bd4d9a2-24be-4067-88ac-2aee1f6dba9a" 
               alt="Seraj Valley, Himachal Pradesh - Where PahadSe sources its pure mountain products"
               class="seraj-valley-img"
             >
@@ -121,7 +124,7 @@ const handleContactSubmit = async () => {
 
             <!-- Error Message -->
             <div v-if="errorMessage" class="error-banner">
-              ⚠️ {{ errorMessage }}
+              {{ errorMessage }}
             </div>
 
             <form @submit.prevent="handleContactSubmit" class="pahadse-form">
@@ -154,7 +157,7 @@ const handleContactSubmit = async () => {
               </div>
 
               <button type="submit" :disabled="isSubmitting" class="submit-btn">
-                {{ isSubmitting ? 'Transmitting...' : 'Send Message 🚀' }}
+                {{ isSubmitting ? 'Transmitting...' : 'Send Message' }}
               </button>
               
             </form>

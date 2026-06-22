@@ -7,7 +7,7 @@ defineOptions({ name: 'AuditLogsTab' })
 const logs = ref([])
 const selected = ref(null)
 const loading = ref(true)
-const loadLimit = ref(15) // ✨ Starts with 15 logs to save backend computation
+const loadLimit = ref(10)
 
 // Filters
 const search = ref('')
@@ -97,50 +97,49 @@ const formatTime = (ts) => {
     </div>
 
     <div v-else>
-      <div class="log-grid">
-        <article 
-          v-for="log in filteredLogs" 
-          :key="log.id" 
-          :class="['log-card', { 'is-expanded': selected?.id === log.id }]" 
-          @click="selected = selected?.id === log.id ? null : log"
-        >
-          <div class="card-top">
-            <div>
-              <h3 class="log-action">{{ log.action }}</h3>
-              <p class="log-meta">
-                👤 {{ log.performedByEmail || 'anonymous' }}
-                <span v-if="log.performedByRole" class="role-badge"> · {{ log.performedByRole }}</span>
-              </p>
-            </div>
-            <span class="entity-pill">{{ log.entityType || 'event' }}</span>
-          </div>
-
-          <div class="card-mid">
-            <div>
-              <span class="small-label">Target Entity</span>
-              <div class="val-text"><code class="id-code">{{ log.entityId || '—' }}</code></div>
-            </div>
-            <div>
-              <span class="small-label">Timestamp</span>
-              <div class="val-text">{{ formatTime(log.createdAt) }}</div>
-            </div>
-          </div>
-
-          <div v-if="selected?.id === log.id" class="log-details slide-down" @click.stop>
-            <div class="data-block">
-              <span class="small-label" style="color: #DC2626;">Old Data State</span>
-              <pre class="json-pre">{{ pretty(log.oldData) }}</pre>
-            </div>
-            <div class="data-block">
-              <span class="small-label" style="color: #16A34A;">New Data State</span>
-              <pre class="json-pre">{{ pretty(log.newData) }}</pre>
-            </div>
-          </div>
-        </article>
+      <div class="audit-table-shell">
+        <table class="audit-table">
+          <thead>
+            <tr>
+              <th>Action</th>
+              <th>Actor</th>
+              <th>Role</th>
+              <th>Entity</th>
+              <th>Target</th>
+              <th>Timestamp</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template v-for="log in filteredLogs" :key="log.id">
+              <tr class="audit-row" @click="selected = selected?.id === log.id ? null : log">
+                <td><strong>{{ log.action || 'EVENT' }}</strong></td>
+                <td>{{ log.performedByEmail || 'anonymous' }}</td>
+                <td><span class="role-badge">{{ log.performedByRole || 'unknown' }}</span></td>
+                <td><span class="entity-pill">{{ log.entityType || 'event' }}</span></td>
+                <td><code class="id-code">{{ log.entityId || '-' }}</code></td>
+                <td>{{ formatTime(log.createdAt) }}</td>
+              </tr>
+              <tr v-if="selected?.id === log.id" class="details-row">
+                <td colspan="6">
+                  <div class="log-details slide-down" @click.stop>
+                    <div class="data-block">
+                      <span class="small-label old">Old Data State</span>
+                      <pre class="json-pre">{{ pretty(log.oldData) }}</pre>
+                    </div>
+                    <div class="data-block">
+                      <span class="small-label new">New Data State</span>
+                      <pre class="json-pre">{{ pretty(log.newData) }}</pre>
+                    </div>
+                  </div>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
       </div>
       
       <div class="load-more-zone" v-if="logs.length >= loadLimit">
-        <button class="btn-load" @click="loadLimit += 15">↓ Load Older Logs</button>
+        <button class="btn-load" @click="loadLimit += 10">Load 10 older logs</button>
       </div>
     </div>
 
@@ -166,38 +165,25 @@ const formatTime = (ts) => {
 .spinner { width: 30px; height: 30px; border: 3px solid #E2E8F0; border-top-color: #0F2A1F; border-radius: 50%; animation: spin 0.85s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* Grid Layout */
-.log-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 16px; margin-top: 10px; }
-
-.log-card {
-  background: #FFFFFF;
-  border: 1px solid #E2E8F0;
-  border-radius: 12px;
-  padding: 20px;
-  box-shadow: 0 4px 6px rgba(0,0,0,0.02);
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-.log-card:hover { border-color: #94A3B8; box-shadow: 0 6px 12px rgba(0,0,0,0.05); transform: translateY(-2px); }
-.log-card.is-expanded { border-color: #0F2A1F; box-shadow: 0 8px 24px rgba(15,42,31,0.06); }
-
-.card-top { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
-.log-action { margin: 0; font-size: 1.05rem; font-weight: 800; color: #0F172A; text-transform: uppercase; letter-spacing: 0.5px; }
-.log-meta { margin: 6px 0 0; font-size: 0.85rem; color: #64748B; font-weight: 600; }
-.role-badge { text-transform: capitalize; color: #0F172A; }
-.entity-pill { padding: 4px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: 800; text-transform: uppercase; background: #F1F5F9; color: #475569; border: 1px solid #E2E8F0; }
-
-.card-mid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; background: #F8FAFC; padding: 12px; border-radius: 8px; border: 1px dashed #CBD5E1; }
-.small-label { display: block; font-size: 0.75rem; font-weight: 800; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
-.val-text { color: #0F172A; font-weight: 700; font-size: 0.9rem; word-break: break-word; }
+/* Table Layout */
+.audit-table-shell { background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 8px; overflow-x: auto; }
+.audit-table { width: 100%; border-collapse: collapse; min-width: 900px; }
+.audit-table th { text-align: left; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; color: #64748B; background: #F8FAFC; padding: 12px 14px; border-bottom: 1px solid #E2E8F0; }
+.audit-table td { padding: 14px; border-bottom: 1px solid #F1F5F9; color: #334155; vertical-align: top; font-size: 0.9rem; }
+.audit-row { cursor: pointer; transition: background 0.15s; }
+.audit-row:hover { background: #F8FAFC; }
+.audit-row strong { color: #0F172A; font-size: 0.9rem; }
+.details-row td { background: #FBFCFE; padding: 0 14px 16px; }
+.role-badge { display: inline-flex; text-transform: capitalize; color: #0F172A; background: #F1F5F9; border: 1px solid #E2E8F0; border-radius: 999px; padding: 4px 9px; font-weight: 800; font-size: 0.75rem; }
+.entity-pill { display: inline-flex; padding: 4px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: 800; text-transform: uppercase; background: #F1F5F9; color: #475569; border: 1px solid #E2E8F0; }
+.small-label { display: block; font-size: 0.75rem; font-weight: 800; color: #64748B; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 4px; }
+.small-label.old { color: #DC2626; }
+.small-label.new { color: #16A34A; }
 .id-code { font-family: monospace; background: #E2E8F0; padding: 2px 6px; border-radius: 4px; color: #334155; }
 
 /* Expanded Details */
-.log-details { display: grid; gap: 16px; border-top: 1px dashed #E2E8F0; padding-top: 16px; margin-top: 4px; }
-.data-block { display: flex; flex-direction: column; gap: 6px; }
+.log-details { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; border: 1px solid #E2E8F0; border-radius: 8px; padding: 14px; margin-top: 4px; background: #FFFFFF; }
+.data-block { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .json-pre { margin: 0; white-space: pre-wrap; word-break: break-word; font-size: 0.8rem; font-family: monospace; color: #334155; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 12px; max-height: 250px; overflow-y: auto; line-height: 1.4; }
 
 .slide-down { animation: slideD 0.2s ease-out; }
@@ -212,5 +198,7 @@ const formatTime = (ts) => {
   .ws-head { flex-direction: column; align-items: stretch; }
   .ws-actions { width: 100%; flex-direction: column; align-items: stretch; }
   .search-input { min-width: 100%; }
+  .log-details { grid-template-columns: 1fr; }
 }
+
 </style>

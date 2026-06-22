@@ -14,17 +14,44 @@ import {
   doc, setDoc, updateDoc, deleteDoc, addDoc, increment, serverTimestamp, arrayUnion,
   limit, orderBy
 } from 'firebase/firestore'
-import { signOut, sendPasswordResetEmail } from 'firebase/auth'
-import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject,listAll } from 'firebase/storage'
+import { signOut, sendPasswordResetEmail, createUserWithEmailAndPassword, signInWithPopup, updateProfile, sendEmailVerification, GoogleAuthProvider } from 'firebase/auth'
+
+import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject, listAll, getMetadata } from 'firebase/storage'
 import imageCompression from 'browser-image-compression'
 import { storage } from '../firebase.js'
 
 // In-Memory Cache Layer
 let _activeProductsCache = null
+const googleProvider = new GoogleAuthProvider();
 const _productCache = new Map()
 const _cartCache = new Map()
 const _userRoleCache = new Map()
 const _viewedThisSession = new Set()
+let _gatewayConfigCache = null
+let _shippingConfigCache = null
+const _configCacheTtlMs = 5 * 60 * 1000
+let _gatewayConfigCachedAt = 0
+let _shippingConfigCachedAt = 0
+
+export const ORDER_STATUS_FLOW = ['pending', 'confirmed', 'shipped', 'delivered']
+export const ORDER_TERMINAL_STATUSES = ['rejected', 'cancelled']
+
+export const ORDER_STATUS_LABELS = {
+  pending: 'Pending Confirmation',
+  confirmed: 'Confirmed — Preparing',
+  shipped: 'Shipped — In Transit',
+  delivered: 'Delivered',
+  rejected: 'Rejected by Store',
+  cancelled: 'Cancelled',
+}
+
+export function formatOrderStatus(status = 'pending') {
+  return ORDER_STATUS_LABELS[status] || status
+}
+
+export function isOrderActive(status = 'pending') {
+  return ORDER_STATUS_FLOW.includes(status)
+}
 
 function _bustProductListCache() {
   _activeProductsCache = null
@@ -108,6 +135,15 @@ export const deleteProductImage = async (fileUrl) => {
   }
 }
 
+export async function getStorageFileSizeLabel(fileUrl) {
+  if (!fileUrl) return 'Unknown Size'
+  const bytes = (await getMetadata(storageRef(storage, fileUrl))).size || 0
+  if (bytes === 0) return '0 Bytes'
+  const units = ['Bytes', 'KB', 'MB', 'GB']
+  const idx = Math.floor(Math.log(bytes) / Math.log(1024))
+  return `${parseFloat((bytes / Math.pow(1024, idx)).toFixed(2))} ${units[idx]}`
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 👤 AUTHENTICATION & USER MANAGEMENT
 // ─────────────────────────────────────────────────────────────────────────────
@@ -139,6 +175,43 @@ export const fetchAllUsersFromDb = async () => {
     console.error("Critical failure during users mapping sync processing:", error)
     throw error
   }
+}
+
+
+export async function addUserNote(userId, noteText) {
+  if (!userId || !noteText?.trim()) throw new Error('NOTE_REQUIRED')
+  const ref = await addDoc(collection(db, 'users', userId, 'notes'), {
+    text: noteText.trim(),
+    createdAt: serverTimestamp(),
+    createdBy: auth.currentUser?.uid || null,
+    createdByEmail: auth.currentUser?.email || null,
+  })
+  await createAuditLog('ADD_USER_NOTE', 'user', userId, null, { noteId: ref.id, text: noteText.trim() })
+  return ref.id
+}
+
+export async function fetchUserNotes(userId) {
+  if (!userId) return []
+  const q = query(collection(db, 'users', userId, 'notes'), orderBy('createdAt', 'desc'), limit(20))
+  const snap = await getDocs(q)
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }))
+}
+
+export async function requestUserDisabledChange(userId, disabled) {
+  if (!userId) throw new Error('USER_ID_REQUIRED')
+  const actorRole = await fetchUserRole()
+  if (actorRole !== 'superadmin') throw new Error('ONLY_SUPERADMIN_CAN_BAN_USERS')
+
+  await setDoc(doc(db, 'adminTasks', `user_disabled_${userId}_${Date.now()}`), {
+    type: 'SET_USER_DISABLED',
+    userId,
+    disabled: !!disabled,
+    status: 'pending',
+    requestedBy: auth.currentUser?.uid || null,
+    requestedAt: serverTimestamp(),
+  })
+  await updateDoc(doc(db, 'users', userId), { disabled: !!disabled })
+  await createAuditLog('REQUEST_USER_DISABLED_CHANGE', 'user', userId, null, { disabled: !!disabled })
 }
 
 export const updateUserRoleInDb = async (userId, newRole) => {
@@ -183,6 +256,69 @@ export const createUserDocument = async (userData) => {
   await setDoc(doc(db, 'users', userData.uid), { ...userData, createdAt: new Date() }, { merge: true })
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 👤 AUTHENTICATION & USER MANAGEMENT
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const registerUserWithEmail = async (email, password, fullName) => {
+  // 1. Create Firebase Auth User
+  const result = await createUserWithEmailAndPassword(auth, email, password)
+  const user = result.user
+
+  // 2. CRITICAL FIX: Save to Firestore IMMEDIATELY
+  const userRef = doc(db, 'users', user.uid)
+  await setDoc(userRef, {
+    uid: user.uid,
+    email: user.email,
+    displayName: fullName,
+    role: 'user',
+    disabled: false, // Prevents errors in admin panel
+    emailVerified: false,
+    createdAt: serverTimestamp()
+  })
+
+  // 3. Safely handle side-effects
+  try {
+    await updateProfile(user, { displayName: fullName })
+    await sendEmailVerification(user)
+  } catch (err) {
+    console.warn("Verification email limit or profile issue. Skipping gracefully.", err)
+  }
+
+  // 4. Force logout so user has to verify email first
+  await logoutUser()
+}
+
+export const registerUserWithGoogle = async (fullName) => {
+  // 1. Authenticate with Google
+  const result = await signInWithPopup(auth, googleProvider)
+  const user = result.user
+
+  const userRef = doc(db, 'users', user.uid)
+  const snap = await getDoc(userRef)
+  
+  // 2. If new user, save to database
+  if (!snap.exists()) {
+    await setDoc(userRef, {
+      uid: user.uid,
+      email: user.email,
+      displayName: fullName || user.displayName || 'Google User',
+      role: 'user',
+      disabled: false,
+      emailVerified: user.emailVerified,
+      createdAt: serverTimestamp()
+    })
+
+    try {
+      await updateProfile(user, { displayName: fullName })
+    } catch(err) {
+      console.warn("Profile update delayed:", err)
+    }
+  }
+  return user
+}
+
+
 export const dispatchPasswordResetToken = async (clientEmail) => {
   if (!clientEmail || !clientEmail.trim()) throw new Error('EMAIL_REQUIRED')
   try {
@@ -206,6 +342,11 @@ export function subscribeToProductsPaginated(limitCount, cb) {
   return onSnapshot(q, cb)
 }
 
+export function subscribeToProductsLimited(limitCount, cb) {
+  const q = query(collection(db, 'products'), limit(limitCount))
+  return onSnapshot(q, cb)
+}
+
 export async function fetchActiveProducts() {
   const q = query(collection(db, 'products'), where('isActive', '==', true))
   const snap = await getDocs(q)
@@ -224,6 +365,12 @@ export async function fetchActiveProducts() {
 export async function fetchAllProducts() {
   const snap = await getDocs(collection(db, 'products'))
   return snap.docs.map(d => ({ id: d.id, ...d.data() }))
+}
+
+export async function fetchProductCategories() {
+  const products = await fetchAllProducts()
+  const cats = new Set(products.map(p => p.category).filter(Boolean))
+  return Array.from(cats)
 }
 
 export async function fetchProductById(productId) {
@@ -487,6 +634,46 @@ export const modifyUserAddressInDb = async (addressId, updatedFields) => {
 // 🛒 ORDERS FULFILLMENT & TRACKING
 // ─────────────────────────────────────────────────────────────────────────────
 
+
+
+async function _resolveOrderContact(order = {}) {
+  let email = order.customerEmail || order.email || null
+  if (!email && order.userId) {
+    try {
+      const userSnap = await getDoc(doc(db, 'users', order.userId))
+      if (userSnap.exists()) email = userSnap.data().email || null
+    } catch (_) { /* non-blocking */ }
+  }
+  return {
+    email,
+    phone: order.phone || null,
+    name: order.customerName || null,
+  }
+}
+
+async function _queueOrderStatusNotification(orderId, orderData, status, extra = {}) {
+  const templates = {
+    confirmed: `Hi ${orderData.customerName || 'Customer'}, your PahadSe order ${orderId.slice(0, 8)}… is confirmed and being prepared.`,
+    shipped: `Your order is on the way! Tracking ID: ${extra.trackingId || 'Check your orders page'}.`,
+    delivered: `Your PahadSe order has been delivered. Thank you for shopping with us!`,
+    rejected: `Your order was cancelled: ${extra.adminComment || 'Please contact support if you need help.'}`,
+  }
+  const message = templates[status]
+  if (!message) return null
+
+  const contact = await _resolveOrderContact(orderData)
+  return createAdminTask('SEND_ORDER_NOTIFICATION', {
+    orderId,
+    channel: 'email',
+    message,
+    customerEmail: contact.email,
+    customerPhone: contact.phone,
+    customerName: contact.name,
+    autoTriggered: true,
+    status,
+  }, 'order', orderId)
+}
+
 export function subscribeToOrders(cb) {
   return onSnapshot(collection(db, 'orders'), cb)
 }
@@ -496,44 +683,165 @@ export function subscribeToOrdersPaginated(limitCount, cb) {
   return onSnapshot(q, cb)
 }
 
-export async function fetchOrderById(orderId) {
-  const snap = await getDoc(doc(db, 'orders', orderId))
-  return snap.exists() ? { id: snap.id, ...snap.data() } : null
+export function subscribeToUserOrders(userId, limitCount, cb) {
+  if (!userId) throw new Error('USER_ID_REQUIRED')
+  const q = query(
+    collection(db, 'orders'),
+    where('userId', '==', userId),
+    orderBy('createdAt', 'desc'),
+    limit(limitCount)
+  )
+  return onSnapshot(q, cb)
 }
+
+//#####################
+// ─────────────────────────────────────────────────────────────────────────────
+// 🛒 ORDERS FULFILLMENT & TRACKING (STRICT STATE MACHINE)
+// ─────────────────────────────────────────────────────────────────────────────
 
 export async function updateOrderStatus(orderId, updates = {}) {
   if (!orderId) throw new Error('ORDER_ID_REQUIRED')
   await updateDoc(doc(db, 'orders', orderId), updates)
 }
 
-export async function confirmOrderInDb(orderId) {
-  const ref = doc(db, 'orders', orderId)
-  const oldSnap = await getDoc(ref)
-  const oldData = oldSnap.exists() ? oldSnap.data() : null
-  await updateDoc(ref, { shippingStatus: 'confirmed' })
-
-  await createAuditLog('CONFIRM_ORDER', 'order', orderId, oldData, { shippingStatus: 'confirmed' })
+export async function confirmOrderInDb(orderId, options = {}) {
+  await updateOrderStatus(orderId, { shippingStatus: 'confirmed' })
 }
 
-export async function rejectOrderInDb(orderId, adminComment) {
-  const ref = doc(db, 'orders', orderId)
-  const oldSnap = await getDoc(ref)
-  const oldData = oldSnap.exists() ? oldSnap.data() : null
-  const newData = { shippingStatus: 'rejected', adminComment: adminComment.trim() }
-  await updateDoc(ref, newData)
-
-  await createAuditLog('REJECT_ORDER', 'order', orderId, oldData, newData)
+export async function shipOrderInDb(orderId, trackingId, options = {}) {
+  await updateOrderStatus(orderId, { shippingStatus: 'shipped', trackingId: trackingId.trim() })
 }
 
-export async function shipOrderInDb(orderId, trackingId) {
-  const ref = doc(db, 'orders', orderId)
-  const oldSnap = await getDoc(ref)
-  const oldData = oldSnap.exists() ? oldSnap.data() : null
-  const newData = { shippingStatus: 'shipped', trackingId: trackingId.trim() }
-  await updateDoc(ref, newData)
-
-  await createAuditLog('SHIP_ORDER', 'order', orderId, oldData, newData)
+export async function markOrderDeliveredInDb(orderId, options = {}) {
+  await updateOrderStatus(orderId, { shippingStatus: 'delivered', deliveredAt: serverTimestamp() })
 }
+
+export async function rejectOrderInDb(orderId, adminComment, options = {}) {
+  const ref = doc(db, 'orders', orderId)
+  const snap = await getDoc(ref)
+  const order = snap.exists() ? snap.data() : null
+  
+  // Strict Refund Logic: Agar online tha aur reject hua, toh refund pending mein dalo
+  if (order && order.paymentMethod === 'online') {
+    await updateOrderStatus(orderId, { shippingStatus: 'cancelled_refund_pending', adminComment: adminComment.trim() })
+  } else {
+    await updateOrderStatus(orderId, { shippingStatus: 'rejected', adminComment: adminComment.trim() })
+  }
+}
+
+// ✨ NEW: STRICT E-COMMERCE ADMIN ACTIONS ✨
+export async function processRefundInDb(orderId) {
+  await updateOrderStatus(orderId, { shippingStatus: 'refunded', refundedAt: serverTimestamp() })
+}
+
+export async function approveReturnInDb(orderId, paymentMethod) {
+  // Agar online tha toh refund logic, COD tha toh bank details ke liye pending
+  if (paymentMethod === 'online') {
+    await updateOrderStatus(orderId, { shippingStatus: 'returned_refund_pending' })
+  } else {
+    await updateOrderStatus(orderId, { shippingStatus: 'returned_refund_pending', note: 'Collect Bank Details for COD Return' })
+  }
+}
+
+export async function rejectReturnInDb(orderId, reason) {
+  // Return reject hua toh wapas delivered stage par jayega with rejection note
+  await updateOrderStatus(orderId, { shippingStatus: 'delivered', returnRejectReason: reason })
+}
+
+export async function approveReplacementInDb(orderId) {
+  await updateOrderStatus(orderId, { shippingStatus: 'replacement_approved' })
+}
+
+export async function markReplacedInDb(orderId, newTrackingId) {
+  await updateOrderStatus(orderId, { shippingStatus: 'replaced', replacementTrackingId: newTrackingId })
+}
+
+
+export async function fetchOrderById(orderId) {
+  const snap = await getDoc(doc(db, 'orders', orderId))
+  return snap.exists() ? { id: snap.id, ...snap.data() } : null
+}
+
+
+export async function cancelCustomerOrder(orderId) {
+  const user = auth.currentUser
+  if (!user) throw new Error('NOT_LOGGED_IN')
+  if (!orderId) throw new Error('ORDER_ID_REQUIRED')
+
+  const ref = doc(db, 'orders', orderId)
+  const snap = await getDoc(ref)
+  if (!snap.exists()) throw new Error('ORDER_NOT_FOUND')
+  const order = snap.data()
+  if (order.userId !== user.uid) throw new Error('ORDER_ACCESS_DENIED')
+  if ((order.shippingStatus || 'pending') !== 'pending') {
+    throw new Error('ONLY_PENDING_ORDERS_CAN_BE_CANCELLED')
+  }
+
+  const payload = {
+    shippingStatus: 'cancelled',
+    adminComment: 'Cancelled by customer before confirmation.',
+    cancelledAt: serverTimestamp(),
+    cancelledBy: user.uid,
+  }
+  await updateDoc(ref, payload)
+  await createAuditLog('CUSTOMER_CANCEL_ORDER', 'order', orderId, order, payload)
+}
+
+
+export async function createAdminTask(type, payload, entityType = 'system', entityId = null) {
+  const taskRef = await addDoc(collection(db, 'adminTasks'), {
+    type,
+    payload,
+    status: 'pending',
+    requestedBy: auth.currentUser?.uid || null,
+    requestedByEmail: auth.currentUser?.email || null,
+    requestedAt: serverTimestamp(),
+  })
+  await createAuditLog(`REQUEST_${type}`, entityType, entityId || taskRef.id, null, payload)
+  return taskRef.id
+}
+
+export async function requestOrderInvoice(orderId) {
+  return createAdminTask('GENERATE_INVOICE', { orderId }, 'order', orderId)
+}
+
+export async function requestOrderRefund(orderId, amount, reason) {
+  if (!reason?.trim()) throw new Error('REFUND_REASON_REQUIRED')
+  return createAdminTask('PROCESS_REFUND', { orderId, amount: Number(amount) || 0, reason: reason.trim() }, 'order', orderId)
+}
+
+export async function requestOrderReturn(orderId, reason) {
+  if (!reason?.trim()) throw new Error('RETURN_REASON_REQUIRED')
+  await updateDoc(doc(db, 'orders', orderId), { returnStatus: 'requested', returnReason: reason.trim() })
+  return createAdminTask('PROCESS_RETURN', { orderId, reason: reason.trim() }, 'order', orderId)
+}
+
+export async function requestOrderNotification(orderId, channel, message) {
+  if (!message?.trim()) throw new Error('MESSAGE_REQUIRED')
+  const order = await fetchOrderById(orderId)
+  const contact = order ? await _resolveOrderContact(order) : {}
+  if (channel === 'email' && !contact.email) throw new Error('CUSTOMER_EMAIL_MISSING')
+  if ((channel === 'sms' || channel === 'whatsapp') && !contact.phone) throw new Error('CUSTOMER_PHONE_MISSING')
+  return createAdminTask('SEND_ORDER_NOTIFICATION', {
+    orderId,
+    channel,
+    message: message.trim(),
+    customerEmail: contact.email,
+    customerPhone: contact.phone,
+    customerName: contact.name,
+    autoTriggered: false,
+  }, 'order', orderId)
+}
+// Add this below approveReplacementInDb in db.js
+export async function rejectReplacementInDb(orderId, reason) {
+  // Replacement reject hua toh wapas delivered par jayega with rejection note
+  await updateOrderStatus(orderId, { 
+    shippingStatus: 'delivered', 
+    replacementRejectReason: reason 
+  })
+}
+
+// ✨ CORE ORDER CREATION LOGIC WITH VALIDATIONS & SIDE-EFFECTS ✨  
 
 export const createCustomerOrderDocument = async (orderPayload) => {
   const user = auth.currentUser
@@ -543,6 +851,7 @@ export const createCustomerOrderDocument = async (orderPayload) => {
     const orderRef = await addDoc(collection(db, 'orders'), {
       ...orderPayload,
       userId: user.uid,
+      customerEmail: user.email || orderPayload.customerEmail || null,
       shippingStatus: 'pending',
       trackingId: 'PENDING_DISPATCH',
       createdAt: serverTimestamp()
@@ -567,13 +876,76 @@ export const createCustomerOrderDocument = async (orderPayload) => {
     throw error
   }
 }
+// ─────────────────────────────────────────────────────────────────────────────
+// 📊 ADMIN ANALYTICS & DASHBOARD DATA
+// ─────────────────────────────────────────────────────────────────────────────  
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ✨ UPDATED ANALYTICS FUNCTION IN db.js
+// ─────────────────────────────────────────────────────────────────────────────
+export async function fetchAdminAnalytics() {
+  const ordersSnap = await getDocs(collection(db, 'orders'))
+  const usersSnap = await getDocs(collection(db, 'users'))
+  let totalRevenue = 0, activeOrders = 0, todayOrders = 0, todayRevenue = 0
+  const monthlyRevenue = new Array(12).fill(0)
+  const todayKey = new Date().toISOString().slice(0, 10)
+  const productSales = new Map()
+  const lowStock = []
+  
+  // ✨ Status Counters
+  const statusCounts = {
+    pending: 0, confirmed: 0, shipped: 0, delivered: 0,
+    return_requested: 0, replacement_requested: 0,
+    cancelled_refund_pending: 0, returned_refund_pending: 0
+  }
+
+  ordersSnap.forEach(d => {
+    const data = d.data()
+    const amount = Number(data.amount) || 0
+    totalRevenue += amount
+    if (!['delivered', 'cancelled', 'rejected', 'refunded', 'replaced'].includes(data.shippingStatus)) activeOrders += 1
+    
+    // Tally exact statuses
+    const status = data.shippingStatus || 'pending'
+    if (statusCounts[status] !== undefined) statusCounts[status]++
+
+    const date = data.createdAt?.toDate ? data.createdAt.toDate() : data.createdAt ? new Date(data.createdAt) : null
+    if (date) {
+      monthlyRevenue[date.getMonth()] += amount
+      if (date.toISOString().slice(0, 10) === todayKey) {
+        todayOrders += 1
+        todayRevenue += amount
+      }
+    }
+    ;(data.items || []).forEach(item => {
+      const key = item.name || item.productId || 'Unknown product'
+      productSales.set(key, (productSales.get(key) || 0) + (Number(item.quantity) || 1))
+    })
+  })
+
+  const productsSnap = await getDocs(collection(db, 'products'))
+  productsSnap.forEach(d => {
+    const data = d.data()
+    if (Number(data.stock) <= 5) lowStock.push({ id: d.id, name: data.name, stock: Number(data.stock) || 0 })
+  })
+
+  const topProduct = [...productSales.entries()].sort((a, b) => b[1] - a[1])[0] || null
+  return {
+    totalRevenue, activeOrders, totalUsers: usersSnap.size,
+    monthlyRevenue, todayOrders, todayRevenue,
+    topProduct: topProduct ? { name: topProduct[0], quantity: topProduct[1] } : null,
+    lowStock,
+    statusCounts // ✨ Exposing to frontend
+  }
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 💬 CUSTOMER SUPPORT & CONTACT INQUIRIES
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function subscribeToSupportChats(cb) {
-  return onSnapshot(collection(db, 'supportChats'), cb)
+export function subscribeToSupportChats(cb, limitCount = 25) {
+  const q = query(collection(db, 'supportChats'), orderBy('lastUpdated', 'desc'), limit(limitCount))
+  return onSnapshot(q, cb)
 }
 
 export async function sendAdminSupportReply(targetUserId, textVal) {
@@ -608,12 +980,18 @@ export const sendSupportMessage = async (targetUserId, textVal, roleType) => {
   if (!textVal.trim() || !targetUserId) return
   try {
     const chatRef = doc(db, 'supportChats', targetUserId)
+    const chatSnap = await getDoc(chatRef)
     const newMessage = { text: textVal.trim(), role: roleType, timestamp: Date.now() }
-    await setDoc(chatRef, {
-      userName: auth.currentUser?.displayName || 'Pahari User',
+    const payload = {
       lastUpdated: serverTimestamp(),
-      messages: arrayUnion(newMessage)
-    }, { merge: true })
+      messages: arrayUnion(newMessage),
+    }
+    if (roleType === 'user') {
+      payload.userName = auth.currentUser?.displayName || 'Pahari User'
+    } else if (!chatSnap.exists() || !chatSnap.data().userName) {
+      payload.userName = 'Pahari User'
+    }
+    await setDoc(chatRef, payload, { merge: true })
   } catch (error) {
     console.error("Support Chat Error:", error)
     throw error
@@ -627,20 +1005,19 @@ export async function createContactQuery(payload) {
     createdAt: serverTimestamp(),
   })
 
-  await createAuditLog('CREATE_CONTACT_QUERY', 'contact_query', ref.id, null, payload)
+  createAuditLog('CREATE_CONTACT_QUERY', 'contact_query', ref.id, null, payload)
   return ref.id
 }
 
-export async function fetchContactQueries() {
-  try {
-    const snap = await getDocs(collection(db, 'contact_queries'))
-    const rows = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }))
-    rows.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))
-    return rows
-  } catch (error) {
-    console.error('fetchContactQueries failed:', error)
-    return []
-  }
+export function subscribeToContactQueriesPaginated(limitCount, cb, onError) {
+  const q = query(collection(db, 'contact_queries'), orderBy('createdAt', 'desc'), limit(limitCount))
+  return onSnapshot(q, cb, onError)
+}
+
+export async function fetchContactQueries(limitCount = 10) {
+  const q = query(collection(db, 'contact_queries'), orderBy('createdAt', 'desc'), limit(limitCount))
+  const snap = await getDocs(q)
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }))
 }
 
 export async function updateContactQueryStatus(queryId, status) {
@@ -711,8 +1088,14 @@ export const deleteProductReview = async (reviewId) => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function fetchGatewayConfig() {
+  const now = Date.now()
+  if (_gatewayConfigCache && now - _gatewayConfigCachedAt < _configCacheTtlMs) {
+    return _gatewayConfigCache
+  }
   const snap = await getDoc(doc(db, 'systemConfig', 'gateways'))
-  return snap.exists() ? snap.data() : { isCodActive: true }
+  _gatewayConfigCache = snap.exists() ? snap.data() : { isCodActive: true }
+  _gatewayConfigCachedAt = now
+  return _gatewayConfigCache
 }
 
 export const setCodStatus = async (statusActive) => {
@@ -723,6 +1106,7 @@ export const setCodStatus = async (statusActive) => {
     const newData = { isCodActive: !!statusActive }
 
     await setDoc(configRef, newData, { merge: true })
+    _gatewayConfigCache = null
 
     await createAuditLog('TOGGLE_COD', 'system_config', 'gateways', oldData, newData)
   } catch (error) {
@@ -732,9 +1116,15 @@ export const setCodStatus = async (statusActive) => {
 }
 
 export async function fetchShippingConfig() {
+  const now = Date.now()
+  if (_shippingConfigCache && now - _shippingConfigCachedAt < _configCacheTtlMs) {
+    return _shippingConfigCache
+  }
   try {
     const snap = await getDoc(doc(db, 'systemConfig', 'shipping'))
-    return snap.exists() ? snap.data() : { fee: 60, freeThreshold: 499, isFreeShippingActive: true }
+    _shippingConfigCache = snap.exists() ? snap.data() : { fee: 60, freeThreshold: 499, isFreeShippingActive: true }
+    _shippingConfigCachedAt = now
+    return _shippingConfigCache
   } catch (e) {
     console.warn("Failed to fetch shipping config:", e.message)
     return { fee: 60, freeThreshold: 499, isFreeShippingActive: true }
@@ -748,12 +1138,43 @@ export async function updateShippingConfig(configPayload) {
     const oldData = oldSnap.exists() ? oldSnap.data() : null
 
     await setDoc(ref, configPayload, { merge: true })
+    _shippingConfigCache = null
 
     await createAuditLog('UPDATE_SHIPPING_CONFIG', 'systemConfig', 'shipping', oldData, configPayload)
   } catch (e) {
     console.error("Shipping config update failed:", e.message)
     throw e
   }
+}
+
+
+export async function fetchGlobalSettings() {
+  const snap = await getDoc(doc(db, 'settings', 'global'))
+  return snap.exists() ? snap.data() : {
+    shippingMode: 'flat',
+    shippingFlatRate: 60,
+    freeShippingAbove: 499,
+    taxPercent: 18,
+    logoUrl: '',
+    razorpayKeyMasked: '',
+  }
+}
+
+export async function updateGlobalSettings(settingsPayload) {
+  const actorRole = await fetchUserRole()
+  if (actorRole !== 'superadmin') throw new Error('ONLY_SUPERADMIN_CAN_UPDATE_SETTINGS')
+  const ref = doc(db, 'settings', 'global')
+  const oldSnap = await getDoc(ref)
+  const oldData = oldSnap.exists() ? oldSnap.data() : null
+  await setDoc(ref, { ...settingsPayload, updatedAt: serverTimestamp() }, { merge: true })
+  await createAuditLog('UPDATE_GLOBAL_SETTINGS', 'settings', 'global', oldData, settingsPayload)
+}
+
+export async function requestRazorpayKeyUpdate(keyLabel, keyValue) {
+  const actorRole = await fetchUserRole()
+  if (actorRole !== 'superadmin') throw new Error('ONLY_SUPERADMIN_CAN_UPDATE_PAYMENT_KEYS')
+  if (!keyLabel?.trim() || !keyValue?.trim()) throw new Error('PAYMENT_KEY_REQUIRED')
+  return createAdminTask('UPDATE_RAZORPAY_KEY', { keyLabel: keyLabel.trim(), keyValue: keyValue.trim() }, 'settings', 'global')
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
