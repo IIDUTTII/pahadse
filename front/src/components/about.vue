@@ -1,14 +1,13 @@
 <script setup>
 defineOptions({ name: 'AboutView' })
 const IMAGES = {
-  hero: 'https://firebasestorage.googleapis.com/v0/b/pahadse-13309.firebasestorage.app/o/contact%2Fcontact1.jpg?alt=media&token=4bd4d9a2-24be-4067-88ac-2aee1f6dba9a',
+  hero: 'https://firebasestorage.googleapis.com/v0/b/pahadse-13309.firebasestorage.app/o/contact%2Fhero2.jpg?alt=media&token=ff12c12e-3078-411a-bc76-f36b6928eaf1',
 
-  village: 'https://firebasestorage.googleapis.com/v0/b/pahadse-13309.firebasestorage.app/o/contact%2Fvillage-woman.jpg?alt=media&token=299a9b82-98fb-4b6f-914a-a112b36bc6bf',
-  family: 'https://images.pexels.com/photos/4100016/pexels-photo-4100016.jpeg',
-
+  village: 'https://firebasestorage.googleapis.com/v0/b/pahadse-13309.firebasestorage.app/o/contact%2Fvillage-women.jpg?alt=media&token=2b210d97-e255-499f-a4ab-98f6f67da6bc',
+  family: 'https://firebasestorage.googleapis.com/v0/b/pahadse-13309.firebasestorage.app/o/contact%2Fvillage.jpg?alt=media&token=87f75b78-6bc9-40b0-965a-09efd60260d4',
   valley: 'https://images.pexels.com/photos/3057904/pexels-photo-3057904.jpeg',
-  founder: 'https://firebasestorage.googleapis.com/v0/b/pahadse-13309.firebasestorage.app/o/contact%2Fconatact-founder-image.jpg?alt=media&token=4f865b21-270f-4469-92e8-9a8633150a14' // 👈 Founder image
-}
+  founder: 'https://firebasestorage.googleapis.com/v0/b/pahadse-13309.firebasestorage.app/o/contact%2Ffounder.jpg?alt=media&token=afb61aba-bbba-4974-a4d2-4416332d01db'
+  }
 </script>
 <template>
   <div class="about-page-wrapper">
@@ -57,8 +56,8 @@ const IMAGES = {
 .mission-list{list-style:none;margin:0 0 20px 0;padding-left:0}
 .mission-list li{font-size:1rem;color:#334155;margin-bottom:12px;padding-left:22px;position:relative;line-height:1.5;text-align:left}
 .mission-list li::before{content:'✓';position:absolute;left:0;color:#16a34a;font-weight:900}
-.image-content{width:100%}
-.section-img{width:100%;height:380px;object-fit:cover;border-radius:16px;border:2px solid #0f172a;box-shadow:8px 8px 0px rgba(0,0,0,0.05);transition:transform 0.3s ease}
+.image-content{width:100%;overflow:hidden;border-radius:16px}
+.section-img{width:100%;object-fit:cover;border-radius:16px;border:2px solid #0f172a;box-shadow:8px 8px 0px rgba(0,0,0,0.05);transition:transform 0.3s ease}
 .section-img:hover{transform:scale(1.02)}
 .small-img-container{margin-top:20px;border-radius:12px;overflow:hidden;border:2px solid #0f172a}
 .small-img{width:100%;height:180px;object-fit:cover}
@@ -94,13 +93,44 @@ const IMAGES = {
 .signature p{margin:5px 0;color:#475569;text-align:center}
 .signature strong{color:#0f172a}
 
-/* 👇 IMAGE POSITION CONTROLS */
-.hero-pos{object-position:center 65%}
-.village-pos{object-position:center 50%}
-.family-pos{object-position:center 50%}
-.valley-pos{object-position:center 60%}
-.founder-pos{object-position:center 60%}
+/* ===== YOUR ORIGINAL IMAGE SIZES (KEPT AS YOU HAD) ===== */
+.hero-pos{object-position:center 60%}
 
-@media(max-width:900px){.alternating-layout,.community-section{grid-template-columns:1fr;gap:30px}.alternating-layout.reverse .text-content{order:1}.alternating-layout.reverse .image-content{order:2}.hero-title{font-size:2.2rem}.hero-image{height:250px}.founder-quote{font-size:1.15rem}.quote-mark{display:none}.section-img{height:280px}}
-@media(max-width:600px){.hero-title{font-size:1.8rem}.hero-image{height:200px}.section-img{height:220px}.location-card,.social-card{padding:25px}.founder-section{padding:35px 20px}.promise-card{padding:20px 15px}}
+.village-pos{object-fit:cover;transform:scale(1.19);transform-origin:55% 18%}
+
+.family-pos{width:92%;aspect-ratio:9/16;object-fit:cover;object-position:center 50%;margin:0 auto;display:block}
+
+.valley-pos{aspect-ratio:3/4;object-position:center 60%}
+
+/* ===== FIXED FOUNDER IMAGE ===== */
+.founder-pos{width:80%;aspect-ratio:1/1;object-fit:cover;margin:0 auto;display:block}
+
+/* ===== MOBILE MEDIA - ONLY CHANGES SIZES, NOT YOUR RATIOS ===== */
+@media(max-width:900px){
+  .alternating-layout,.community-section{grid-template-columns:1fr;gap:30px}
+  .alternating-layout.reverse .text-content{order:1}
+  .alternating-layout.reverse .image-content{order:2}
+  .hero-title{font-size:2.2rem}
+  .hero-image{height:250px}
+  .founder-quote{font-size:1.15rem}
+  .quote-mark{display:none}
+  
+  /* Mobile adjustments - keeping your ratios */
+  .family-pos{aspect-ratio:4/3;width:100%}
+  .valley-pos{aspect-ratio:4/3;width:100%}
+  .founder-pos{width:90%;aspect-ratio:1/1}
+}
+
+@media(max-width:600px){
+  .hero-title{font-size:1.8rem}
+  .hero-image{height:200px}
+  .location-card,.social-card{padding:25px}
+  .founder-section{padding:35px 20px}
+  .promise-card{padding:20px 15px}
+  
+  /* Mobile small adjustments */
+  .family-pos{aspect-ratio:3/4;width:100%}
+  .valley-pos{aspect-ratio:1/1;width:100%}
+  .founder-pos{width:100%;aspect-ratio:1/1}
+}
 </style>
