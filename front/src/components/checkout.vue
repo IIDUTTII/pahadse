@@ -15,6 +15,11 @@ const appliedPromoDiscount = ref(Number(window.sessionStorage.getItem('active_pr
 const shippingConfig = ref({ fee: 60, freeThreshold: 499, isFreeShippingActive: true })
 
 onMounted(() => {
+  // ✨ LOAD RAZORPAY SCRIPT DYNAMICALLY
+  const script = document.createElement('script')
+  script.src = 'https://checkout.razorpay.com/v1/checkout.js'
+  document.body.appendChild(script)
+
   auth.onAuthStateChanged(async (user) => {
     if (!user) { router.push('/login'); return }
     
@@ -57,50 +62,142 @@ const activeSelectedAddressObject = computed(() => activeAddressesList.value.fin
 
 const routeToProfileAddressManager = () => router.push('/user')
 
+// ✨ RAZORPAY INTEGRATION LOGIC
+const openRazorpayModal = async (finalizedOrderBlueprint) => {
+  try {
+    // 1. BACKEND CALL: Create Razorpay Order
+    // Yahan tumhe apne Backend/Firebase Function ka URL dalna hoga
+    const response = await fetch('/api/create-razorpay-order', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ amount: grandTotal.value })
+    })
+    
+    const orderData = await response.json()
+    
+    if (!orderData || !orderData.id) {
+      throw new Error("Failed to generate Razorpay Order ID from backend")
+    }
+
+    // 2. OPEN RAZORPAY
+    const options = {
+      key: import.meta.env.VITE_RAZORPAY_KEY_ID, // Vue/Vite mein .env se id lena
+      amount: orderData.amount, // Paise paison mein (e.g., 50000 for ₹500)
+      currency: "INR",
+      name: "PahadSe",
+      description: "Mountain Harvest Provisions",
+      order_id: orderData.id, // Backend se aya hua Order ID
+      handler: async function (response) {
+        // 3. PAYMENT SUCCESS - Verify signature via Backend
+        try {
+          processingOrder.value = true
+          
+          /* Yahan ek backend verification call honi chahiye:
+          const verifyRes = await fetch('/api/verify-payment', {
+             method: 'POST', body: JSON.stringify(response)
+          })
+          if(verifyRes.ok) { ...proceed } */
+
+          // Agar verify ho gaya, toh database mein order save karo:
+          finalizedOrderBlueprint.paymentStatus = 'paid'
+          finalizedOrderBlueprint.razorpayPaymentId = response.razorpay_payment_id
+          
+          const orderId = await createCustomerOrderDocument(finalizedOrderBlueprint)
+          
+          window.sessionStorage.removeItem('active_promo_discount')
+          window.sessionStorage.removeItem('active_promo_code')
+
+          alert(`Payment Successful! Order Registered. ID: ${orderId}`)
+          router.push('/user') 
+          
+        } catch (err) {
+          alert("Order saving failed after payment: " + err.message)
+          processingOrder.value = false
+        }
+      },
+      prefill: {
+        name: finalizedOrderBlueprint.customerName,
+        email: auth.currentUser?.email || "",
+        contact: finalizedOrderBlueprint.phone
+      },
+      theme: {
+        color: "#111827"
+      },
+      modal: {
+        ondismiss: function() {
+          processingOrder.value = false;
+          alert("Payment was cancelled.");
+        }
+      }
+    };
+
+    const rzp = new window.Razorpay(options);
+    rzp.on('payment.failed', function (response){
+      processingOrder.value = false;
+      alert("Payment Failed: " + response.error.description);
+    });
+    
+    rzp.open();
+
+  } catch (error) {
+    alert("Could not start Razorpay gateway: " + error.message)
+    processingOrder.value = false
+  }
+}
+
+
 const processCheckoutSubmission = async () => {
   if (!activeSelectedAddressObject.value) { alert("Please choose a valid destination route address."); return }
   processingOrder.value = true
   
-  try {
-    const target = activeSelectedAddressObject.value
-    const finalizedOrderBlueprint = {
-      customerName: target.fullName,
-      phone: target.phone,
-      address: `${target.streetAddress}, ${target.city}, ${target.state} - ${target.pincode}`,
-      
-      items: cartItems.value.map(i => ({ 
-        productId: i.productId, 
-        name: i.name, 
-        variant: i.variant || i.weight || 'Standard Option',
-        quantity: i.quantity, 
-        price: i.price, 
-        emoji: i.emoji || '📦',
-        imageUrl: i.imageUrl || null,
-        slug: i.slug || 'product'
-      })),
-      
-      subtotal: subtotal.value,
-      shippingCost: shippingCost.value,
-      couponCode: appliedPromoCode.value,
-      couponDiscount: appliedPromoDiscount.value,
-      amount: grandTotal.value,
-      
-      paymentMethod: selectedPaymentMethod.value,
-      paymentStatus: selectedPaymentMethod.value === 'cod' ? 'pending_collection' : 'paid',
-      shippingStatus: 'pending',
-      trackingId: 'PENDING_DISPATCH'
-    }
-
-    const orderId = await createCustomerOrderDocument(finalizedOrderBlueprint)
+  const target = activeSelectedAddressObject.value
+  const finalizedOrderBlueprint = {
+    customerName: target.fullName,
+    phone: target.phone,
+    address: `${target.streetAddress}, ${target.city}, ${target.state} - ${target.pincode}`,
     
-    window.sessionStorage.removeItem('active_promo_discount')
-    window.sessionStorage.removeItem('active_promo_code')
+    items: cartItems.value.map(i => ({ 
+      productId: i.productId, 
+      name: i.name, 
+      variant: i.variant || i.weight || 'Standard Option',
+      quantity: i.quantity, 
+      price: i.price, 
+      emoji: i.emoji || '📦',
+      imageUrl: i.imageUrl || null,
+      slug: i.slug || 'product'
+    })),
+    
+    subtotal: subtotal.value,
+    shippingCost: shippingCost.value,
+    couponCode: appliedPromoCode.value,
+    couponDiscount: appliedPromoDiscount.value,
+    amount: grandTotal.value,
+    
+    paymentMethod: selectedPaymentMethod.value,
+    shippingStatus: 'pending',
+    trackingId: 'PENDING_DISPATCH'
+  }
 
-    alert(`Order Registered Successfully! ID: ${orderId}`)
-    router.push('/user') 
+  try {
+    // ✨ CHECK PAYMENT METHOD
+    if (selectedPaymentMethod.value === 'online') {
+      // Razorpay Flow trigger karega
+      await openRazorpayModal(finalizedOrderBlueprint)
+    } else {
+      // COD Flow (Pehla wala logic)
+      finalizedOrderBlueprint.paymentStatus = 'pending_collection'
+      const orderId = await createCustomerOrderDocument(finalizedOrderBlueprint)
+      
+      window.sessionStorage.removeItem('active_promo_discount')
+      window.sessionStorage.removeItem('active_promo_code')
+
+      alert(`COD Order Registered Successfully! ID: ${orderId}`)
+      router.push('/user') 
+    }
   } catch (error) {
     alert("Operation aborted: " + error.message)
-  } finally { processingOrder.value = false }
+    processingOrder.value = false
+  }
 }
 </script>
 
@@ -186,7 +283,7 @@ const processCheckoutSubmission = async () => {
           <div class="calc-ledger-line total-highlight-row"><span>Final Cost Balance</span><span>₹{{ grandTotal }}</span></div>
           
           <button @click="processCheckoutSubmission" :disabled="processingOrder || cartItems.length === 0" class="checkout-finalize-submit-cta-btn">
-            {{ processingOrder ? 'Encrypting Matrix...' : selectedPaymentMethod === 'cod' ? 'Confirm Delivery Run (COD) 🚀' : 'Initialize Razorpay Gateway 🚀' }}
+            {{ processingOrder ? 'Encrypting Matrix...' : selectedPaymentMethod === 'cod' ? 'Confirm Delivery Run (COD) 🚀' : 'Pay via Razorpay 🚀' }}
           </button>
         </div>
       </aside>
