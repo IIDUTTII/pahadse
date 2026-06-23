@@ -3,7 +3,7 @@ venv/
 front/venv/
 __pycache__/
 *.pyc
-
+.dev.vars
 # Node
 node_modules/
 front/node_modules/
@@ -23,3 +23,5 @@ serviceAccountKey.json
 
 run.sh
 gen.py
+# Local backend secrets (NEVER PUSH THIS)
+.dev.vars
