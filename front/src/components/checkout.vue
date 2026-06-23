@@ -72,6 +72,10 @@ const openRazorpayModal = async (finalizedOrderBlueprint) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ amount: grandTotal.value })
     })
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Backend Error (${response.status}): Please check if your API is live on Cloudflare.`);
+    }
     
     const orderData = await response.json()
     
