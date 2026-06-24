@@ -2,8 +2,8 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { db, auth } from '../firebase.js'
-import { doc, onSnapshot, getDoc } from 'firebase/firestore'
-import { createCustomerOrderDocument, fetchShippingConfig } from './db.js'
+import { doc, getDoc } from 'firebase/firestore'
+import { createCustomerOrderDocument, fetchShippingConfig, fetchCart } from './db.js'
 
 defineOptions({ name: 'Checkout' })
 const router = useRouter()
@@ -15,7 +15,6 @@ const appliedPromoDiscount = ref(Number(window.sessionStorage.getItem('active_pr
 const shippingConfig = ref({ fee: 60, freeThreshold: 499, isFreeShippingActive: true })
 
 onMounted(() => {
-  // ✨ LOAD RAZORPAY SCRIPT DYNAMICALLY
   const script = document.createElement('script')
   script.src = 'https://checkout.razorpay.com/v1/checkout.js'
   document.body.appendChild(script)
@@ -23,99 +22,82 @@ onMounted(() => {
   auth.onAuthStateChanged(async (user) => {
     if (!user) { router.push('/login'); return }
     
-    onSnapshot(doc(db, 'carts', user.uid), (snap) => {
-      cartItems.value = snap.exists() ? (snap.data().items ?? []) : []
-      if (cartItems.value.length === 0 && !processingOrder.value) { router.push('/') }
-      loading.value = false
-    })
+    try {
+      cartItems.value = await fetchCart();
+      if (cartItems.value.length === 0) { router.push('/'); return; }
 
-    onSnapshot(doc(db, 'users', user.uid), (snap) => {
-      if (snap.exists()) {
-        userAccountData.value = snap.data()
-        const addresses = snap.data().addresses || []
+      const userSnap = await getDoc(doc(db, 'users', user.uid))
+      if (userSnap.exists()) {
+        userAccountData.value = userSnap.data()
+        const addresses = userSnap.data().addresses || []
         if (addresses.length > 0 && !selectedAddressId.value) selectedAddressId.value = addresses[0].id
       }
-    })
 
-    try {
       const configSnap = await getDoc(doc(db, 'systemConfig', 'gateways'))
       if (configSnap.exists()) isCodGloballyActive.value = configSnap.data().isCodActive
       
       const shipCfg = await fetchShippingConfig()
       if (shipCfg) shippingConfig.value = shipCfg
+
     } catch (e) { console.warn(e.message) }
+    finally { loading.value = false }
   })
 })
 
 const subtotal = computed(() => cartItems.value.reduce((s, i) => s + i.price * i.quantity, 0))
-
 const shippingCost = computed(() => {
   if (subtotal.value === 0) return 0
   if (shippingConfig.value.isFreeShippingActive && subtotal.value >= shippingConfig.value.freeThreshold) return 0
   return Number(shippingConfig.value.fee) || 0
 })
-
 const grandTotal = computed(() => Math.max(subtotal.value - appliedPromoDiscount.value + shippingCost.value, 0))
-
 const activeAddressesList = computed(() => userAccountData.value?.addresses || [])
 const activeSelectedAddressObject = computed(() => activeAddressesList.value.find(a => a.id === selectedAddressId.value))
-
 const routeToProfileAddressManager = () => router.push('/user')
 
-// ✨ RAZORPAY INTEGRATION LOGIC
 const openRazorpayModal = async (finalizedOrderBlueprint) => {
   try {
-    // 1. BACKEND CALL: Create Razorpay Order
-    // Yahan tumhe apne Backend/Firebase Function ka URL dalna hoga
     const response = await fetch('/api/create-razorpay-order', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ amount: grandTotal.value })
     })
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Backend Error (${response.status}): Please check if your API is live on Cloudflare.`);
-    }
     
+    if (!response.ok) throw new Error(`Backend Error (${response.status}): Order creation failed.`)
     const orderData = await response.json()
-    
-    if (!orderData || !orderData.id) {
-      throw new Error("Failed to generate Razorpay Order ID from backend")
-    }
+    if (!orderData || !orderData.id) throw new Error("Invalid Razorpay Order ID from backend")
 
-    // 2. OPEN RAZORPAY
     const options = {
-      key: import.meta.env.VITE_RAZORPAY_KEY_ID, // Vue/Vite mein .env se id lena
-      amount: orderData.amount, // Paise paison mein (e.g., 50000 for ₹500)
+      key: import.meta.env.VITE_RAZORPAY_KEY_ID, 
+      amount: orderData.amount,
       currency: "INR",
       name: "PahadSe",
       description: "Mountain Harvest Provisions",
-      order_id: orderData.id, // Backend se aya hua Order ID
-      handler: async function (response) {
-        // 3. PAYMENT SUCCESS - Verify signature via Backend
+      order_id: orderData.id, 
+      handler: async function (paymentResponse) {
         try {
           processingOrder.value = true
           
-          /* Yahan ek backend verification call honi chahiye:
           const verifyRes = await fetch('/api/verify-payment', {
-             method: 'POST', body: JSON.stringify(response)
+             method: 'POST', 
+             headers: { 'Content-Type': 'application/json' },
+             body: JSON.stringify(paymentResponse)
           })
-          if(verifyRes.ok) { ...proceed } */
-
-          // Agar verify ho gaya, toh database mein order save karo:
-          finalizedOrderBlueprint.paymentStatus = 'paid'
-          finalizedOrderBlueprint.razorpayPaymentId = response.razorpay_payment_id
           
+          if(!verifyRes.ok) throw new Error("Payment signature verification failed. Possible tampering.")
+
+          finalizedOrderBlueprint.paymentStatus = 'paid'
+          finalizedOrderBlueprint.razorpayPaymentId = paymentResponse.razorpay_payment_id
           const orderId = await createCustomerOrderDocument(finalizedOrderBlueprint)
           
           window.sessionStorage.removeItem('active_promo_discount')
           window.sessionStorage.removeItem('active_promo_code')
 
-          alert(`Payment Successful! Order Registered. ID: ${orderId}`)
+          alert(`Payment Successful! Order ID: ${orderId}`)
           router.push('/user') 
           
         } catch (err) {
-          alert("Order saving failed after payment: " + err.message)
+          alert("Error: " + err.message)
           processingOrder.value = false
         }
       },
@@ -124,31 +106,24 @@ const openRazorpayModal = async (finalizedOrderBlueprint) => {
         email: auth.currentUser?.email || "",
         contact: finalizedOrderBlueprint.phone
       },
-      theme: {
-        color: "#111827"
-      },
+      theme: { color: "#16a34a" },
       modal: {
-        ondismiss: function() {
-          processingOrder.value = false;
-          alert("Payment was cancelled.");
-        }
+        ondismiss: function() { processingOrder.value = false; }
       }
     };
 
     const rzp = new window.Razorpay(options);
-    rzp.on('payment.failed', function (response){
+    rzp.on('payment.failed', function (paymentResponse){
       processingOrder.value = false;
-      alert("Payment Failed: " + response.error.description);
+      alert("Payment Failed: " + paymentResponse.error.description);
     });
-    
     rzp.open();
 
   } catch (error) {
-    alert("Could not start Razorpay gateway: " + error.message)
+    alert("Could not start Razorpay: " + error.message)
     processingOrder.value = false
   }
 }
-
 
 const processCheckoutSubmission = async () => {
   if (!activeSelectedAddressObject.value) { alert("Please choose a valid destination route address."); return }
@@ -159,43 +134,24 @@ const processCheckoutSubmission = async () => {
     customerName: target.fullName,
     phone: target.phone,
     address: `${target.streetAddress}, ${target.city}, ${target.state} - ${target.pincode}`,
-    
-    items: cartItems.value.map(i => ({ 
-      productId: i.productId, 
-      name: i.name, 
-      variant: i.variant || i.weight || 'Standard Option',
-      quantity: i.quantity, 
-      price: i.price, 
-      emoji: i.emoji || '📦',
-      imageUrl: i.imageUrl || null,
-      slug: i.slug || 'product'
-    })),
-    
-    subtotal: subtotal.value,
-    shippingCost: shippingCost.value,
-    couponCode: appliedPromoCode.value,
-    couponDiscount: appliedPromoDiscount.value,
-    amount: grandTotal.value,
-    
-    paymentMethod: selectedPaymentMethod.value,
-    shippingStatus: 'pending',
-    trackingId: 'PENDING_DISPATCH'
+    items: cartItems.value.map(i => ({ productId: i.productId, name: i.name, variant: i.variant || i.weight || 'Standard Option', quantity: i.quantity, price: i.price, emoji: i.emoji || '📦', imageUrl: i.imageUrl || null, slug: i.slug || 'product' })),
+    subtotal: subtotal.value, shippingCost: shippingCost.value, couponCode: appliedPromoCode.value, couponDiscount: appliedPromoDiscount.value, amount: grandTotal.value,
+    paymentMethod: selectedPaymentMethod.value, shippingStatus: 'pending', trackingId: 'PENDING_DISPATCH'
   }
 
   try {
-    // ✨ CHECK PAYMENT METHOD
     if (selectedPaymentMethod.value === 'online') {
-      // Razorpay Flow trigger karega
-      await openRazorpayModal(finalizedOrderBlueprint)
+      if(confirm("Test mode active. Proceed to Razorpay gateway?")) {
+        await openRazorpayModal(finalizedOrderBlueprint)
+      } else {
+        processingOrder.value = false
+      }
     } else {
-      // COD Flow (Pehla wala logic)
       finalizedOrderBlueprint.paymentStatus = 'pending_collection'
       const orderId = await createCustomerOrderDocument(finalizedOrderBlueprint)
-      
       window.sessionStorage.removeItem('active_promo_discount')
       window.sessionStorage.removeItem('active_promo_code')
-
-      alert(`COD Order Registered Successfully! ID: ${orderId}`)
+      alert(`COD Order Registered! ID: ${orderId}`)
       router.push('/user') 
     }
   } catch (error) {
@@ -206,146 +162,230 @@ const processCheckoutSubmission = async () => {
 </script>
 
 <template>
-  <div class="checkout-viewport-page">
-    <div v-if="loading" class="center-loading-state"><div class="spinner"></div><p>Synchronizing manifest matrices…</p></div>
+  <div class="seamless-checkout-page">
+    <div v-if="loading" class="center-loading-state"><div class="spinner"></div></div>
 
-    <div v-else class="checkout-layout-grid fade-in">
-      <main class="checkout-inputs-column">
-        
-        <section class="checkout-section-card">
-          <div class="section-card-header">
-            <h3>1. Delivery Destination Address</h3>
-            <button class="add-address-trigger-btn" @click="routeToProfileAddressManager">🛠️ Manage / Add Addresses</button>
-          </div>
+    <div v-else class="checkout-split-layout fade-in">
+      
+      <main class="checkout-form-side">
+        <div class="form-content-wrapper">
+          
+          <h1 class="page-main-title">Checkout</h1>
 
-          <div class="saved-addresses-selection-grid">
-            <div v-for="addr in activeAddressesList" :key="addr.id" :class="['address-option-card', { 'is-selected-card': selectedAddressId === addr.id }]" @click="selectedAddressId = addr.id">
-              <div class="card-badge-row"><span class="addr-tag-pill">{{ addr.label }}</span><span v-if="selectedAddressId === addr.id" class="checkmark">✓ Selected</span></div>
-              <strong>{{ addr.fullName }}</strong>
-              <p class="card-street-txt">{{ addr.streetAddress }}, {{ addr.city }}, {{ addr.state }}</p>
-              <span class="card-phone-txt">📞 contact: {{ addr.phone }}</span>
+          <section class="checkout-section">
+            <div class="section-header">
+              <h2>Shipping Address</h2>
+              <button class="text-action-btn" @click="routeToProfileAddressManager">Add / Edit</button>
             </div>
-            <div v-if="activeAddressesList.length === 0" class="no-addresses-fallback-notice">
-              <p>No verified addresses discoverable on this account node.</p>
-              <button class="save-address-btn" @click="routeToProfileAddressManager" style="margin-top:10px;">Go Create Address Now</button>
-            </div>
-          </div>
-        </section>
 
-        <section class="checkout-section-card">
-          <h3>2. Transaction Settlement Gateway</h3>
-          <div class="payment-methods-vertical-stack" style="margin-top:16px;">
-            <label :class="['payment-method-row', { 'active-method': selectedPaymentMethod === 'online' }]">
-              <div class="input-radio-flex">
-                <input type="radio" v-model="selectedPaymentMethod" value="online" name="payment_lane" />
-                <div class="payment-txt-label"><strong>Secure Online Razorpay Portal</strong><p>UPI, NetBanking, Credit or Debit cards.</p></div>
+            <div class="address-grid">
+              <div v-if="activeAddressesList.length === 0" class="empty-address-box">
+                <p>No addresses found.</p>
+                <button class="btn-dark-outline" @click="routeToProfileAddressManager">Add Address</button>
               </div>
-            </label>
-            <label :class="['payment-method-row', { 'active-method': selectedPaymentMethod === 'cod', 'is-disabled-row': !isCodGloballyActive }]">
-              <div class="input-radio-flex">
-                <input type="radio" v-model="selectedPaymentMethod" value="cod" :disabled="!isCodGloballyActive" name="payment_lane" />
-                <div class="payment-txt-label"><strong>Cash on Delivery (COD Shipment Route)</strong><p v-if="isCodGloballyActive">Pay your local postman or route runner upon package delivery.</p><p v-else class="error-msg-txt">⚠️ COD routes are offline due to climate parameters.</p></div>
-              </div>
-            </label>
+              
+              <label 
+                v-for="addr in activeAddressesList" :key="addr.id" 
+                :class="['address-tile', { 'is-selected': selectedAddressId === addr.id }]"
+              >
+                <div class="tile-radio">
+                  <input type="radio" v-model="selectedAddressId" :value="addr.id" />
+                </div>
+                <div class="tile-content">
+                  <div class="tile-header">
+                    <strong>{{ addr.fullName }}</strong>
+                    <span class="addr-tag">{{ addr.label }}</span>
+                  </div>
+                  <p class="tile-address">{{ addr.streetAddress }}, {{ addr.city }}, {{ addr.state }} - {{ addr.pincode }}</p>
+                  <span class="tile-phone">{{ addr.phone }}</span>
+                </div>
+              </label>
+            </div>
+          </section>
+
+          <section class="checkout-section">
+            <div class="section-header">
+              <h2>Payment Method</h2>
+            </div>
+            
+            <div class="payment-group">
+              <label :class="['payment-tile', { 'is-selected': selectedPaymentMethod === 'online' }]">
+                <div class="tile-radio">
+                  <input type="radio" v-model="selectedPaymentMethod" value="online" name="payment_lane" />
+                </div>
+                <div class="tile-content">
+                  <div class="payment-title-row">
+                    <strong>Pay Online</strong>
+                    <span class="test-badge">Test Mode</span>
+                  </div>
+                  <p>Razorpay (UPI, Cards, NetBanking)</p>
+                </div>
+              </label>
+
+              <label :class="['payment-tile', { 'is-selected': selectedPaymentMethod === 'cod', 'is-disabled': !isCodGloballyActive }]">
+                <div class="tile-radio">
+                  <input type="radio" v-model="selectedPaymentMethod" value="cod" :disabled="!isCodGloballyActive" name="payment_lane" />
+                </div>
+                <div class="tile-content">
+                  <strong>Cash on Delivery (COD)</strong>
+                  <p v-if="isCodGloballyActive">Pay when you receive the package.</p>
+                  <p v-else class="error-text">COD is currently unavailable in your region.</p>
+                </div>
+              </label>
+            </div>
+          </section>
+          
+          <div class="mobile-only-checkout-btn">
+            <button @click="processCheckoutSubmission" :disabled="processingOrder || cartItems.length === 0" class="btn-primary-large">
+              {{ processingOrder ? 'Processing...' : selectedPaymentMethod === 'cod' ? 'Confirm COD Order' : 'Pay Now' }}
+            </button>
           </div>
-        </section>
+
+        </div>
       </main>
 
-      <aside class="checkout-bill-summary-column">
-        <div class="summary-sticky-card-box">
-          <h3>Review Allocation Items</h3>
-          <div class="summary-divider-line"></div>
+      <aside class="checkout-summary-side">
+        <div class="summary-content-wrapper">
           
-          <div class="checkout-read-only-basket-list">
-            <div v-for="(item, idx) in cartItems" :key="idx" class="summary-item-row-strip">
-              <div class="item-visual-meta">
-                
-                <div class="item-thumb-mini">
-                  <img v-if="item.imageUrl" :src="item.imageUrl" class="checkout-item-img" />
-                  <span v-else class="item-emoji-icon">{{ item.emoji || '🍯' }}</span>
-                </div>
-
-                <div class="item-names-block">
-                  <strong class="item-lbl-name">{{ item.name }}</strong>
-                  <span class="item-lbl-variant">{{ item.variant || item.weight || 'Standard' }}</span>
-                  <span class="item-lbl-qty">Batch Qty: {{ item.quantity }} units</span>
+          <div class="basket-items-list">
+            <div v-for="(item, idx) in cartItems" :key="idx" class="summary-item-row">
+              <div class="item-left">
+                <div class="thumb"><img v-if="item.imageUrl" :src="item.imageUrl" /><span v-else>{{ item.emoji || '🍯' }}</span></div>
+                <div class="info">
+                  <strong>{{ item.name }}</strong>
+                  <span>{{ item.variant || item.weight || 'Standard' }}</span>
+                  <span class="qty">{{ item.quantity }} × ₹{{ item.price }} = ₹{{ item.price * item.quantity }}</span>
                 </div>
               </div>
-              <span class="item-line-calc-price">₹{{ item.price * item.quantity }}</span>
+              <span class="price">₹{{ item.price * item.quantity }}</span>
             </div>
           </div>
 
-          <div class="summary-divider-line"></div>
-          <div class="calc-ledger-line"><span>Basket Subtotal</span><span>₹{{ subtotal }}</span></div>
-          
-          <div v-if="appliedPromoCode" class="calc-ledger-line" style="color: #16a34a; font-weight: 800;">
-            <span>Voucher ({{ appliedPromoCode }})</span><span>-₹{{ appliedPromoDiscount }}</span>
+          <div class="ledger-section">
+            <div class="ledger-row">
+              <span>Subtotal</span>
+              <span>₹{{ subtotal }}</span>
+            </div>
+            
+            <div v-if="appliedPromoCode" class="ledger-row highlight-green">
+              <span>Discount ({{ appliedPromoCode }})</span>
+              <span>-₹{{ appliedPromoDiscount }}</span>
+            </div>
+
+            <div class="ledger-row">
+              <span>Shipping</span>
+              <span v-if="shippingCost === 0" class="highlight-green">Free</span>
+              <span v-else>₹{{ shippingCost }}</span>
+            </div>
           </div>
 
-          <div class="calc-ledger-line"><span>High-Altitude Freight Post</span><span v-if="shippingCost === 0" class="free-badge">FREE</span><span v-else>₹{{ shippingCost }}</span></div>
-          <div class="summary-divider-line"></div>
-          <div class="calc-ledger-line total-highlight-row"><span>Final Cost Balance</span><span>₹{{ grandTotal }}</span></div>
-          
-          <button @click="processCheckoutSubmission" :disabled="processingOrder || cartItems.length === 0" class="checkout-finalize-submit-cta-btn">
-            {{ processingOrder ? 'Encrypting Matrix...' : selectedPaymentMethod === 'cod' ? 'Confirm Delivery Run (COD) 🚀' : 'Pay via Razorpay 🚀' }}
-          </button>
+          <div class="ledger-total">
+            <span>Total</span>
+            <span class="total-amount">
+              <span class="currency-code">INR</span> ₹{{ grandTotal }}
+            </span>
+          </div>
+
+          <div class="inline-warning">
+            <span>⚠️</span>
+            <p><strong>Test Mode Active:</strong> This is a testing environment. No real payments will be processed. Use test card details for Razorpay.</p>
+          </div>
+
+          <div class="desktop-only-checkout-btn">
+            <button @click="processCheckoutSubmission" :disabled="processingOrder || cartItems.length === 0" class="btn-primary-large">
+              {{ processingOrder ? 'Processing...' : selectedPaymentMethod === 'cod' ? 'Confirm COD Order' : 'Pay Now' }}
+            </button>
+          </div>
+
         </div>
       </aside>
+
     </div>
   </div>
 </template>
 
 <style scoped>
-.checkout-viewport-page { background-color: #FAF6F0; min-height: 100vh; padding: calc(90px + 40px) 4% 60px; box-sizing: border-box; font-family: 'Jost', sans-serif; color: #111827; }
-.center-loading-state { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 50vh; gap: 16px; color: #6b7280; }
-.spinner { width: 44px; height: 44px; border: 3px solid #e5e7eb; border-top-color: #16a34a; border-radius: 50%; animation: spin 0.85s linear infinite; }
-@keyframes spin { to { transform: rotate(360deg); } }
-.checkout-layout-grid { width: 100%; max-width: 1140px; margin: 0 auto; display: grid; grid-template-columns: 60% 40%; gap: 36px; }
-.checkout-inputs-column { display: flex; flex-direction: column; gap: 24px; }
-.checkout-section-card { background-color: #ffffff; border: 2px solid #111827; border-radius: 16px; padding: 32px; }
-.section-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 10px; }
-.checkout-section-card h3 { font-family: 'Cinzel', serif; font-size: 1.3rem; font-weight: 800; margin: 0; }
-.add-address-trigger-btn { background: #ffffff; color: #111827; border: 2px solid #111827; padding: 6px 14px; border-radius: 6px; font-size: 0.82rem; font-weight: 700; cursor: pointer; }
-.saved-addresses-selection-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
-.address-option-card { border: 2px solid #cbd5e1; border-radius: 10px; padding: 16px; cursor: pointer; position: relative; }
-.address-option-card.is-selected-card { border-color: #16a34a; background-color: #f0fdf4; }
-.card-badge-row { display: flex; justify-content: space-between; align-items: center; }
-.addr-tag-pill { background-color: #111827; color: #FAF6F0; font-size: 0.7rem; font-weight: 800; padding: 2px 8px; border-radius: 4px; text-transform: uppercase; }
-.checkmark { font-size: 0.78rem; color: #16a34a; font-weight: 800; }
-.card-street-txt { font-size: 0.88rem; color: #4b5563; margin: 6px 0 10px; line-height: 1.4; }
-.card-phone-txt { font-size: 0.82rem; color: #111827; font-weight: 700; }
-.no-addresses-fallback-notice { text-align: center; color: #6b7280; padding: 20px; grid-column: 1/-1; border: 2px dashed #cbd5e1; border-radius: 8px; }
-.save-address-btn { background-color: #111827; color: #FAF6F0; border: none; padding: 10px 24px; border-radius: 30px; font-weight: 700; cursor: pointer; }
-.payment-methods-vertical-stack { display: flex; flex-direction: column; gap: 12px; }
-.payment-method-row { display: flex; justify-content: space-between; align-items: center; border: 2px solid #cbd5e1; border-radius: 12px; padding: 20px; cursor: pointer; }
-.payment-method-row.active-method { border-color: #111827; background-color: #f9fafb; }
-.payment-method-row.is-disabled-row { opacity: 0.55; cursor: not-allowed; background-color: #f3f4f6; }
-.input-radio-flex { display: flex; gap: 14px; align-items: flex-start; }
-.input-radio-flex input { width: 18px; height: 18px; accent-color: #111827; }
-.payment-txt-label strong { font-size: 1rem; font-weight: 800; }
-.payment-txt-label p { font-size: 0.85rem; color: #6b7280; margin: 4px 0 0; }
-.payment-txt-label p.error-msg-txt { color: #dc2626; font-weight: 700; }
-.checkout-bill-summary-column { position: sticky; top: 100px; }
-.summary-sticky-card-box { background-color: #ffffff; border: 2px solid #111827; border-radius: 16px; padding: 28px; }
-.summary-sticky-card-box h3 { font-family: 'Cinzel', serif; font-size: 1.25rem; font-weight: 800; margin: 0; }
-.summary-divider-line { height: 2px; background-color: #111827; margin: 16px 0; }
-.checkout-read-only-basket-list { display: flex; flex-direction: column; gap: 14px; max-height: 300px; overflow-y: auto; }
-.summary-item-row-strip { display: flex; justify-content: space-between; align-items: center; }
-.item-visual-meta { display: flex; align-items: center; gap: 12px; }
-.item-thumb-mini { font-size: 1.8rem; background-color: #fafafa; border: 1px solid #e5e7eb; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; border-radius: 6px; overflow: hidden; flex-shrink: 0; }
-.checkout-item-img { width: 100%; height: 100%; object-fit: cover; }
-.item-names-block { display: flex; flex-direction: column; }
-.item-lbl-name { font-size: 0.95rem; font-weight: 800; }
-.item-lbl-variant { font-size: 0.8rem; color: #4B5563; font-weight: 600; text-transform: uppercase; margin-top: 2px; }
-.item-lbl-qty { font-size: 0.78rem; color: #6b7280; margin-top: 2px; }
-.item-line-calc-price { font-size: 1.05rem; font-weight: 900; }
-.calc-ledger-line { display: flex; justify-content: space-between; font-size: 0.95rem; color: #4b5563; margin-bottom: 10px; }
-.free-badge { color: #16a34a; font-weight: 800; }
-.total-highlight-row { font-size: 1.3rem; font-weight: 900; margin-top: 6px; }
-.checkout-finalize-submit-cta-btn { width: 100%; padding: 16px; background-color: #111827; color: #FAF6F0; border: none; border-radius: 30px; font-size: 0.95rem; font-weight: 800; cursor: pointer; text-transform: uppercase; margin-top: 14px; transition: 0.2s; }
-.checkout-finalize-submit-cta-btn:hover:not(:disabled) { background-color: #16a34a; }
-.checkout-finalize-submit-cta-btn:disabled { opacity: 0.7; cursor: not-allowed; }
-.fade-in { animation: fIn 0.3s ease-out; }
-@keyframes fIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
-@media (max-width: 900px) { .checkout-layout-grid { grid-template-columns: 1fr; } .checkout-bill-summary-column { position: relative; top: 0; } }
+.seamless-checkout-page{background:#faf7f4;min-height:100vh;font-family:'Jost',sans-serif;color:#1a1a2e;padding-top:80px}
+.checkout-split-layout{display:flex;min-height:calc(100vh - 80px);gap:24px;max-width:1200px;margin:0 auto}
+.checkout-form-side{flex:1.2;background:#ffffff;display:flex;justify-content:flex-start;padding:32px 40px 60px 40px;border-radius:12px}
+.checkout-summary-side{flex:0.8;background:#ffffff;display:flex;justify-content:flex-start;padding:32px 40px 60px 40px;border-radius:12px}
+.form-content-wrapper{width:100%;max-width:100%}
+.summary-content-wrapper{width:100%;max-width:100%}
+.center-loading-state{display:flex;justify-content:center;align-items:center;height:60vh}
+.spinner{width:36px;height:36px;border:3px solid #ede8e2;border-top-color:#16a34a;border-radius:50%;animation:spin 0.8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.fade-in{animation:fIn 0.3s ease}
+@keyframes fIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.page-main-title{font-family:'Inter',sans-serif;font-size:1.5rem;font-weight:700;margin:0 0 24px 0;color:#1a1a2e;letter-spacing:-0.3px;text-align:left}
+.checkout-section{margin-bottom:28px}
+.section-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.section-header h2{font-size:0.85rem;font-weight:600;margin:0;color:#6b5f55;text-transform:uppercase;letter-spacing:0.4px;text-align:left}
+.text-action-btn{background:none;border:none;color:#16a34a;font-weight:600;font-size:0.8rem;cursor:pointer;padding:0;transition:color 0.2s}
+.text-action-btn:hover{color:#0e7a34}
+.address-grid{display:flex;flex-direction:column;gap:4px;width:100%}
+.address-tile{display:flex;align-items:center;gap:10px;padding:8px 12px;cursor:pointer;background:#faf7f4;border-radius:6px;border:1px solid transparent;transition:all 0.15s;width:100%;box-sizing:border-box}
+.address-tile:hover{background:#f0ebe6;border-color:#d4ccc4}
+.address-tile.is-selected{background:#f0fdf4;border-color:#16a34a}
+.tile-radio{flex-shrink:0;padding-top:0}
+.tile-radio input{width:15px;height:15px;accent-color:#16a34a;cursor:pointer}
+.tile-content{flex:1;min-width:0;display:flex;flex-wrap:wrap;align-items:center;gap:4px 14px}
+.tile-header{display:flex;align-items:center;gap:6px}
+.tile-header strong{font-size:0.85rem;color:#1a1a2e;font-weight:600}
+.addr-tag{font-size:0.5rem;background:#ede8e2;color:#5a4f45;padding:1px 8px;border-radius:100px;font-weight:700;text-transform:uppercase;letter-spacing:0.3px;flex-shrink:0}
+.tile-address{font-size:0.8rem;color:#6b5f55;margin:0}
+.tile-phone{font-size:0.75rem;color:#1a1a2e;font-weight:600}
+.payment-group{display:grid;grid-template-columns:1fr 1fr;gap:6px;width:100%}
+.payment-tile{display:flex;align-items:center;gap:10px;padding:10px 12px;cursor:pointer;background:#faf7f4;border-radius:6px;border:1px solid transparent;transition:all 0.15s;width:100%;box-sizing:border-box}
+.payment-tile:hover{background:#f0ebe6;border-color:#d4ccc4}
+.payment-tile.is-selected{background:#f0fdf4;border-color:#16a34a}
+.payment-title-row{display:flex;flex-direction:column;width:100%}
+.payment-title-row strong{font-size:0.85rem;color:#1a1a2e;font-weight:600}
+.payment-title-row p{font-size:0.72rem;color:#6b5f55;margin:1px 0 0}
+.payment-title-row .error-text{color:#dc2626!important;font-weight:600}
+.is-disabled{opacity:0.5;cursor:not-allowed;background:#f5f0eb!important}
+.is-disabled:hover{background:#f5f0eb!important;border-color:transparent!important}
+.test-badge{background:#fef3c7;color:#92400e;font-size:0.5rem;font-weight:700;padding:1px 8px;border-radius:4px;text-transform:uppercase;letter-spacing:0.3px;display:inline-block;margin-top:1px}
+.empty-address-box{padding:14px;text-align:center;color:#6b5f55;background:#faf7f4;border-radius:6px;border:1px dashed #d4ccc4;width:100%;box-sizing:border-box}
+.btn-dark-outline{background:transparent;border:1px solid #1a1a2e;color:#1a1a2e;padding:5px 16px;border-radius:6px;font-weight:600;font-size:0.8rem;cursor:pointer;transition:all 0.2s}
+.btn-dark-outline:hover{background:#1a1a2e;color:#fff}
+
+/* ─── SUMMARY ITEMS ─── */
+.basket-items-list{display:flex;flex-direction:column;gap:6px;margin-bottom:18px;max-height:320px;overflow-y:auto;padding-right:4px;width:100%}
+.basket-items-list::-webkit-scrollbar{width:4px}
+.basket-items-list::-webkit-scrollbar-track{background:#ede8e2;border-radius:10px}
+.basket-items-list::-webkit-scrollbar-thumb{background:#c4b8ae;border-radius:10px}
+.summary-item-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #ede8e2;width:100%}
+.summary-item-row:last-child{border-bottom:none}
+.item-left{display:flex;align-items:center;gap:12px}
+.thumb{width:48px;height:48px;background:#fff;border:1px solid #ede8e2;border-radius:8px;display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0}
+.thumb img{width:100%;height:100%;object-fit:cover}
+.thumb span{font-size:1.5rem}
+.info{display:flex;flex-direction:column}
+.info strong{font-size:.95rem;font-weight:600;color:#1a1a2e}
+.info span{font-size:.8rem;color:#6b5f55}
+.info .qty{font-size:.82rem;color:#5a4f45;margin-top:2px;font-weight:500}
+.price{font-size:1rem;font-weight:700;color:#1a1a2e}
+
+/* ─── LEDGER ─── */
+.ledger-section{border-top:1px solid #ede8e2;border-bottom:1px solid #ede8e2;padding:14px 0;margin-bottom:16px;display:flex;flex-direction:column;gap:6px;width:100%}
+.ledger-row{display:flex;justify-content:space-between;font-size:.9rem;color:#5a4f45;padding:2px 0;width:100%}
+.highlight-green{color:#16a34a;font-weight:600}
+.ledger-total{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;width:100%}
+.ledger-total>span:first-child{font-size:1rem;font-weight:700;color:#1a1a2e}
+.total-amount{font-size:1.4rem;font-weight:800;color:#1a1a2e;display:flex;align-items:baseline;gap:4px}
+.currency-code{font-size:.75rem;color:#6b5f55;font-weight:600}
+
+/* ─── WARNING ─── */
+.inline-warning{background:#fefae0;border:1px solid #f5e0b0;border-radius:8px;padding:10px 14px;font-size:.82rem;color:#7a6535;line-height:1.4;margin-bottom:16px;display:flex;align-items:flex-start;gap:10px;width:100%;box-sizing:border-box}
+.inline-warning span{font-size:.95rem;flex-shrink:0}
+.inline-warning p{margin:0}
+
+/* ─── BUTTON ─── */
+.btn-primary-large{width:100%;padding:14px;background:#1a1a2e;color:#fff;border:none;border-radius:10px;font-size:.95rem;font-weight:700;cursor:pointer;transition:all .25s;box-sizing:border-box}
+.btn-primary-large:hover:not(:disabled){background:#16a34a;transform:translateY(-2px);box-shadow:0 6px 20px rgba(22,163,74,0.2)}
+.btn-primary-large:disabled{opacity:.5;cursor:not-allowed;transform:none}
+.mobile-only-checkout-btn{display:none;margin-top:20px}
+.desktop-only-checkout-btn{display:block}
+
+@media(max-width:900px){.checkout-split-layout{flex-direction:column;gap:16px}.checkout-form-side,.checkout-summary-side{justify-content:flex-start;padding:20px 20px 40px 20px}.checkout-summary-side{order:1}.checkout-form-side{order:2}.desktop-only-checkout-btn{display:none}.mobile-only-checkout-btn{display:block}.page-main-title{display:none}.payment-group{grid-template-columns:1fr}}
 </style>
