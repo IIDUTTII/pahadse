@@ -44,7 +44,7 @@ const primaryImage = (p) => p.imageUrls?.find(u => u?.trim()) ?? null
     <div class="hero">
       <div class="hero-badge">🌿 100% Natural | Handmade in Himalayas</div>
       <h1 class="hero-title">Pure Mountain Goodness,<br>Delivered to Your Door</h1>
-      <p style="color: red; font-weight: bold;">⚠ Warning: This website is currently in a testing phase. All products shown are for demonstration purposes only.</p>
+      <p style="color: #fca5a5; font-weight: 500; font-size: 13px; margin-bottom: 12px;">⚠ Testing phase — demo products only</p>
       <p class="hero-sub">No preservatives · Ethically sourced · Plastic‑free packaging</p>
     </div>
 
@@ -91,37 +91,50 @@ const primaryImage = (p) => p.imageUrls?.find(u => u?.trim()) ?? null
 </template>
 
 <style scoped>
-.page{--footer-green:#0F2A1F;--footer-green-light:#2A5C3E;--gold:#C9A96E;--cream-bg:#FDFBF7;--warm-cream:#FAF3E0;--text-muted:#5A6E52;--white:#FFFFFF;--radius-lg:28px;--radius-md:20px;background:linear-gradient(145deg,var(--cream-bg)0%,var(--warm-cream)100%);padding:100px 28px;font-family:'Inter','DM Sans',system-ui,sans-serif;min-height:100vh}
-.hero{background:linear-gradient(135deg,var(--footer-green)0%,var(--footer-green-light)100%);border-radius:var(--radius-lg);padding:48px 40px;margin-bottom:48px;text-align:center;box-shadow:0 8px 24px rgba(15,42,31,0.06);position:relative;overflow:hidden}
+/* ─── PAGE ─── */
+.page{background:#FFFFFF;padding:100px 20px 80px;font-family:'Montserrat','Inter','Poppins',sans-serif;min-height:100vh;max-width:1200px;margin:0 auto}
+/* ─── HERO ─── ORIGINAL BANNER (Georgia, Cream) */
+.hero{background:linear-gradient(135deg,#0F2A1F,#2A5C3E);border-radius:16px;padding:48px 40px;margin-bottom:48px;text-align:center;box-shadow:0 8px 24px rgba(15,42,31,0.06);position:relative;overflow:hidden}
 .hero-badge{background:rgba(255,255,240,0.2);backdrop-filter:blur(4px);display:inline-block;padding:6px 18px;border-radius:40px;font-size:12px;font-weight:500;color:#F5EDE0;margin-bottom:20px}
 .hero-title{font-family:'Georgia',serif;font-size:38px;font-weight:600;color:#F5EDE0;line-height:1.2;margin-bottom:16px;letter-spacing:-0.3px}
 .hero-sub{font-size:16px;color:rgba(245,237,224,0.85);margin-bottom:24px;font-weight:400}
-.section-head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;margin-bottom:32px}
-.section-title{font-family:'Georgia',serif;font-size:24px;font-weight:500;color:var(--footer-green);display:flex;align-items:center;gap:10px}
-.filter-pills{display:flex;gap:12px;flex-wrap:wrap}
-.pill{background:#ffffff;border:1.5px solid #D4E0C8;padding:6px 20px;border-radius:40px;font-size:13px;font-weight:500;color:var(--text-muted);cursor:pointer;transition:all 0.2s ease}
-.pill:hover,.pill.active{background:var(--footer-green-light);border-color:var(--footer-green-light);color:#ffffff}
-.product-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:28px}
-.skeleton-card{height:380px;background:linear-gradient(90deg,#E9EFE3 25%,#F4F8ED 50%,#E9EFE3 75%);background-size:200% 100%;border-radius:var(--radius-md);animation:shimmer 1.2s infinite}
+/* ─── SECTION HEAD ─── */
+.section-head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:20px}
+.section-title{font-family:'Montserrat','Inter',sans-serif;font-size:18px;font-weight:600;color:#0F172A;display:flex;align-items:center;gap:8px}
+.count-pill{background:#E8F0E0;color:#2A5C3E;padding:2px 10px;border-radius:12px;font-size:12px;font-weight:600}
+.filter-pills{display:flex;gap:8px;flex-wrap:wrap}
+.pill{background:#fff;border:1px solid #E2E8F0;padding:6px 16px;border-radius:20px;font-size:12px;font-weight:500;color:#475569;cursor:pointer;transition:all 0.15s}
+.pill:hover,.pill.active{background:#22C55E;border-color:#22C55E;color:#fff}
+/* ─── PRODUCT GRID ─── */
+.product-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+.skeleton-card{height:320px;background:linear-gradient(90deg,#E8ECF0 25%,#F1F4F8 50%,#E8ECF0 75%);background-size:200% 100%;border-radius:12px;animation:shimmer 1.2s infinite}
 @keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
-.product-card{background:#fcfaf5;border-radius:var(--radius-md);overflow:hidden;box-shadow:0 2px 8px rgba(15,42,31,0.02);transition:all 0.3s ease;cursor:pointer;position:relative;display:flex;flex-direction:column}
-.product-card:hover{transform:translateY(-4px);box-shadow:0 8px 24px rgba(15,42,31,0.06)}
-.corner-badge{position:absolute;top:14px;left:14px;z-index:2;font-size:11px;font-weight:600;padding:5px 14px;border-radius:40px;letter-spacing:0.3px}
-.corner-badge.discount{background:var(--gold);color:var(--footer-green)}
-.corner-badge.sold-out{background:#d1c8c0;color:#4a3f35}
-.product-thumb{width:100%;aspect-ratio:1/1;height:auto;background:#FEFCF5;display:flex;align-items:center;justify-content:center;overflow:hidden;border-bottom:1px solid #f0f2e8}
-.thumb-img{width:100%;height:100%;object-fit:contain}
-.emoji-fallback{font-size:64px}
-.product-body{padding:16px;flex:1;display:flex;flex-direction:column}
-.product-name{font-family:'Inter','DM Sans',sans-serif;font-size:17px;font-weight:500;color:var(--footer-green);margin-bottom:6px}
-
-.product-desc{font-size:13px;color:var(--text-muted);line-height:1.4;margin-bottom:12px;flex:1;font-weight:400}
-.price-original{font-size:13px;color:#B0BEA0;text-decoration:line-through;margin-right:6px}
-.product-price{font-size:18px;font-weight:600;color:var(--gold)}
-.load-more-container{text-align:center;margin-top:40px}
-.load-more-btn{background:transparent;border:2px solid var(--footer-green-light);color:var(--footer-green-light);padding:12px 30px;border-radius:40px;font-size:14px;font-weight:500;cursor:pointer;transition:all 0.2s}
-.load-more-btn:hover{background:var(--footer-green-light);color:#fff}
-@media(max-width:1024px){.product-grid{grid-template-columns:repeat(3,1fr);gap:24px}.hero-title{font-size:32px}}
-@media(max-width:768px){.page{padding:80px 16px 90px}.product-grid{grid-template-columns:repeat(2,1fr);gap:14px}.hero-title{font-size:26px}.product-name{font-size:16px}.product-thumb{aspect-ratio:1/1}.product-card{border-radius:16px}.product-body{padding:12px}}
-@media(max-width:480px){.hero{padding:28px 20px}.hero-title{font-size:22px}.hero-sub{font-size:14px}.section-title{font-size:20px}.filter-pills .pill{font-size:12px;padding:4px 14px}.product-grid{gap:10px}.product-price{font-size:16px}.load-more-btn{padding:10px 20px;font-size:13px}}
+/* ─── PRODUCT CARD ─── */
+.product-card{background:#FFFFFF;border-radius:12px;overflow:hidden;border:1px solid #E8ECF0;transition:all 0.2s;cursor:pointer;display:flex;flex-direction:column;position:relative}
+.product-card:hover{transform:translateY(-3px);box-shadow:0 8px 24px rgba(0,0,0,0.06);border-color:#22C55E}
+/* ─── BADGES ─── */
+.corner-badge{position:absolute;top:10px;left:10px;z-index:2;font-size:10px;font-weight:600;padding:3px 10px;border-radius:12px;letter-spacing:0.2px}
+.corner-badge.discount{background:#22C55E;color:#fff}
+.corner-badge.sold-out{background:#94A3B8;color:#fff}
+/* ─── PRODUCT THUMB ─── */
+.product-thumb{width:100%;aspect-ratio:1/1;background:#F8FAFC;display:flex;align-items:center;justify-content:center;overflow:hidden;border-bottom:1px solid #F1F4F8}
+.thumb-img{width:100%;height:100%;object-fit:contain;padding:8px}
+.emoji-fallback{font-size:48px}
+/* ─── PRODUCT BODY ─── */
+.product-body{padding:12px 14px 14px;flex:1;display:flex;flex-direction:column}
+.product-name{font-family:'Montserrat','Inter',sans-serif;font-size:13px;font-weight:600;color:#0F172A;margin-bottom:4px;line-height:1.3;overflow:hidden;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2}
+.product-desc{font-size:12px;color:#64748B;line-height:1.3;margin-bottom:8px;flex:1;font-weight:400;overflow:hidden;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2}
+.price-original{font-size:12px;color:#94A3B8;text-decoration:line-through;margin-right:6px}
+.product-price{font-size:18px;font-weight:700;color:#0F172A}
+/* ─── LOAD MORE ─── */
+.load-more-container{text-align:center;margin-top:32px}
+.load-more-btn{background:#fff;border:1px solid #E2E8F0;color:#0F172A;padding:10px 28px;border-radius:20px;font-size:13px;font-weight:500;cursor:pointer;transition:all 0.2s}
+.load-more-btn:hover{background:#22C55E;border-color:#22C55E;color:#fff}
+/* ─── EMPTY STATE ─── */
+.empty-state{text-align:center;padding:60px 20px;color:#64748B}
+.empty-state span{font-size:48px;display:block;margin-bottom:12px}
+/* ─── RESPONSIVE ─── */
+@media(max-width:1024px){.product-grid{grid-template-columns:repeat(3,1fr);gap:14px}.hero-title{font-size:28px}}
+@media(max-width:768px){.page{padding:80px 12px 80px}.product-grid{grid-template-columns:repeat(2,1fr);gap:12px}.hero-title{font-size:24px}.hero{padding:28px 20px}.product-name{font-size:13px}.product-body{padding:10px 12px 12px}.product-price{font-size:16px}}
+@media(max-width:480px){.hero-title{font-size:20px}.hero-sub{font-size:12px}.section-title{font-size:16px}.filter-pills .pill{font-size:11px;padding:4px 12px}.product-grid{gap:10px}.product-price{font-size:15px}.load-more-btn{padding:8px 18px;font-size:12px}}
 </style>

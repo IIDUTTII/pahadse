@@ -4,15 +4,19 @@ import Footer from './components/Footer.vue'
 </script>
 
 <template>
-  <NavBar />
+  <div id="app-wrapper">
+    <NavBar />
 
-  <router-view v-slot="{ Component }">
-    <keep-alive include="Home,About,Contact,Admin,Login,Register,User,NavBar,Footer">
-      <component :is="Component" />
-    </keep-alive>
-  </router-view>
+    <main class="main-content">
+      <router-view v-slot="{ Component }">
+        <keep-alive include="Home,About,Contact,Admin,Login,Register,User,NavBar,Footer">
+          <component :is="Component" />
+        </keep-alive>
+      </router-view>
+    </main>
 
-  <Footer />
+    <Footer />
+  </div>
 </template>
 
 <style>
@@ -23,16 +27,14 @@ import Footer from './components/Footer.vue'
   padding: 0;
 }
 
-/* ✅ STRONGER FIX: Force root font size at highest level */
 :root, html {
   font-size: 16px !important;
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
 }
 
-/* Ensure body inherits correctly */
 body {
-  background: #F5EFE0;
+  background: #FFFFFF;
   min-height: 100vh;
   overflow-x: hidden;
   width: 100%;
@@ -43,32 +45,34 @@ body {
 #app {
   min-height: 100vh;
   width: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
-/* Prevent any scaling issues on media */
+#app-wrapper {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  width: 100%;
+}
+
+.main-content {
+  flex: 1;
+  width: 100%;
+}
+
 img, picture, video, canvas, svg {
   max-width: 100%;
   display: block;
 }
 
-/* Tablet styles */
 @media (max-width: 768px) and (min-width: 481px) {
-  :root, html {
-    font-size: 14px !important;
-  }
+  :root, html { font-size: 14px !important; }
 }
-
-/* Mobile styles */
 @media (max-width: 480px) {
-  :root, html {
-    font-size: 12px !important;
-  }
+  :root, html { font-size: 12px !important; }
 }
-
-/* Desktop override for any window wider than 768px */
 @media (min-width: 769px) {
-  :root, html {
-    font-size: 16px !important;
-  }
+  :root, html { font-size: 16px !important; }
 }
 </style>

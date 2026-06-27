@@ -25,3 +25,6 @@ run.sh
 gen.py
 # Local backend secrets (NEVER PUSH THIS)
 .dev.vars
+.wrangler/
+.pycache/
+.py

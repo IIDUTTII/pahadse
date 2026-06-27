@@ -1,6 +1,10 @@
 <script setup>
+
+
 defineOptions({ name: 'NewTab' })
 </script>
+
+
 <template>
     <div class="new-tab">
         <h2>New Tab Content</h2>
