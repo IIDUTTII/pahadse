@@ -56,11 +56,17 @@
 
 <script setup>
 import { reactive, ref, onMounted, onUnmounted, nextTick } from 'vue'
+import { useRouter } from 'vue-router' 
 
+
+const router = useRouter()   
 const showPopup = ref(false)
 const togglePopup = () => { showPopup.value = !showPopup.value }
 const closePopup = () => { showPopup.value = false }
-const goTo = (r) => { console.log(r); showPopup.value = false }
+const goTo = (route) => {
+  showPopup.value = false
+  router.push(`/${route}`)    // ← Navigates to /products or /trekking
+}
 
 const settled = ref(false)
 const loadedCards = ref([false, false, false, false, false])
