@@ -1,23 +1,30 @@
 <script setup>
+import { computed } from 'vue'          // ← add this
+import { useRoute } from 'vue-router'   // ← add this
 import NavBar from './components/NavBar.vue'
 import Footer from './components/Footer.vue'
+
+const route = useRoute()
+
+const hideNavFooter = computed(() => {
+  return route.name === 'Landing' || route.path === '/'
+})
 </script>
 
 <template>
   <div id="app-wrapper">
-    <NavBar />
-
+    <NavBar v-if="!hideNavFooter" />
     <main class="main-content">
       <router-view v-slot="{ Component }">
-        <keep-alive include="Home,About,Contact,Admin,Login,Register,User,NavBar,Footer">
+        <keep-alive include="Home,About,Contact,Admin,Login,Register,User,NavBar,Footer,Landing">
           <component :is="Component" />
         </keep-alive>
       </router-view>
     </main>
-
-    <Footer />
+    <Footer v-if="!hideNavFooter" />
   </div>
 </template>
+
 
 <style>
 /* ===== GLOBAL RESET + FONT BASELINE ===== */

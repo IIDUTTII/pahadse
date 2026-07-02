@@ -24,6 +24,10 @@ serviceAccountKey.json
 run.sh
 gen.py
 # Local backend secrets (NEVER PUSH THIS)
+# Wrangler
+.wrangler/
+.wrangler.toml
+.dev.vars
 .dev.vars
 .wrangler/
 .pycache/

@@ -107,7 +107,7 @@ const clearVoucher = () => {
 
       <div v-if="loading" class="cart-state-card"><div class="spinner"></div><p>Loading your basket…</p></div>
       <div v-else-if="!currentUser" class="cart-state-card isolated-auth"><span class="state-glyph">🔒</span><h3>Sign in required</h3><p>Please log in to view your basket.</p><router-link to="/login" class="shop-btn">Go to Login</router-link></div>
-      <div v-else-if="cartItems.length === 0" class="cart-state-card isolated-auth"><span class="state-glyph">🛒</span><h3>Your basket is empty</h3><p>Discover mountain‑fresh products.</p><router-link to="/" class="shop-btn">Browse Products</router-link></div>
+      <div v-else-if="cartItems.length === 0" class="cart-state-card isolated-auth"><span class="state-glyph">🛒</span><h3>Your basket is empty</h3><p>Discover mountain‑fresh products.</p><router-link to="/products" class="shop-btn">Browse Products</router-link></div>
 
       <div v-else class="cart-split-layout fade-in">
         <main class="cart-main-list">

@@ -73,7 +73,7 @@ function closeMobileMenu() { mobileMenuOpen.value = false }
     </div>
 
     <nav class="tb-center desktop-nav">
-      <router-link to="/">Home</router-link>
+      <router-link to="/products">Home</router-link>
       <router-link v-if="isAdmin || isSuperAdmin" to="/admin">Admin</router-link>
       <router-link v-if="currentUser" to="/cart">Cart</router-link>
       <router-link v-if="currentUser" to="/orders">Orders</router-link>
@@ -105,7 +105,7 @@ function closeMobileMenu() { mobileMenuOpen.value = false }
 
   <transition name="menu-slide">
     <div v-if="mobileMenuOpen" class="mobile-menu" @click="closeMobileMenu">
-      <router-link to="/">🏠 Home</router-link>
+      <router-link to="/products">🏠 Home</router-link>
       <router-link v-if="isAdmin || isSuperAdmin" to="/admin">⚙️ Admin</router-link>
       <router-link to="/terms">🛍️ Terms</router-link>
       <router-link to="/user">📖 Profile</router-link>

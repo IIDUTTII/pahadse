@@ -116,9 +116,9 @@ const nextImage = () => { if(activeIdx.value < cleanImages.value.length - 1) act
 
 <template>
   <div class="page">
-    <div class="breadcrumb-container"><button class="back-link-action" @click="router.push('/')">← Back to Collection</button></div>
+    <div class="breadcrumb-container"><button class="back-link-action" @click="router.push('/products')">← Back to Collection</button></div>
     <div v-if="loading" class="center-state"><div class="spinner"></div></div>
-    <div v-else-if="notFound" class="center-state text-404"><h3>Product Not Found</h3><button class="go-home-btn" @click="router.push('/')">Return to Shop</button></div>
+    <div v-else-if="notFound" class="center-state text-404"><h3>Product Not Found</h3><button class="go-home-btn" @click="router.push('/products')">Return to Shop</button></div>
 
     <div v-else-if="product" class="product-viewport-container fade-in">
       <div class="rosier-top-split-grid">

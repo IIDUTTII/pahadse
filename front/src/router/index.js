@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { isAdmin, isSuperAdmin, authPromise } from '../userAuth.js'
 
+import Landing     from '../components/landing.vue'
 import Home          from '../components/home.vue'
 import Admin         from '../components/admin/dashboard.vue'
 import Login         from '../components/login.vue'
@@ -18,8 +19,10 @@ import Contact from '../components/contact.vue'
 import About from '../components/about.vue'
 import orders from '../components/orders.vue'
 
+
 const routes = [
-  { path: '/',                       component: Home,meta: { title: 'Home | PahadSe' }          },
+  { path: '/',                       component:   Landing,meta: { title: 'PahadSe' }          },
+  { path: '/products',                   component:   Home,meta: { title: 'Home | PahadSe' }          },
   { path: '/login',                  component: Login,meta: { title: 'Login | PahadSe' }         },
   { path: '/register',               component: Register,meta: { title: 'Register | PahadSe' }      },
   { path: '/user',                   component: User,meta: { title: 'User | PahadSe' }          },
