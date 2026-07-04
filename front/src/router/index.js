@@ -38,7 +38,8 @@ const routes = [
   { path: '/return', component: Return,meta: { title: 'Return & Refund | PahadSe' } },
   { path: '/contact', component: Contact,meta: { title: 'Contact | PahadSe' } },
   { path: '/about', component: About,meta: { title: 'About | PahadSe' } },
-  { path: '/orders', component: orders,meta: { title: 'Orders | PahadSe' } }
+  { path: '/orders', component: orders,meta: { title: 'Orders | PahadSe' } },
+  { path: '/layout', component: layout,meta: { title: 'Layout | PahadSe' } }
 ]
 
 const router = createRouter({
