@@ -18,11 +18,12 @@ import Return  from '../components/return-refund.vue'
 import Contact from '../components/contact.vue'
 import About from '../components/about.vue'
 import orders from '../components/orders.vue'
+import layout from '../components/layout.vue'
 
 
 const routes = [
   { path: '/',                       component:   Landing,meta: { title: 'PahadSe' }          },
-  { path: '/products',                   component:   Home,meta: { title: 'Home | PahadSe' }          },
+  { path: '/products',              component:   Home,meta: { title: 'Home | PahadSe' }          },
   { path: '/login',                  component: Login,meta: { title: 'Login | PahadSe' }         },
   { path: '/register',               component: Register,meta: { title: 'Register | PahadSe' }      },
   { path: '/user',                   component: User,meta: { title: 'User | PahadSe' }          },

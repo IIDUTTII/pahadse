@@ -121,7 +121,7 @@ function closeMobileMenu() { mobileMenuOpen.value = false }
   <div v-if="mobileMenuOpen" class="menu-overlay" @click="closeMobileMenu"></div>
 
   <nav class="mobile-bottom-nav">
-    <router-link to="/" class="mob-item"><span>🏠</span><span>Home</span></router-link>
+    <router-link to="/products" class="mob-item"><span>🏠</span><span>Home</span></router-link>
     
     <router-link to="/cart" class="mob-item"><span>🛒</span><span>Cart</span></router-link>
     <router-link to="/orders" class="mob-item"><span>📦</span><span>Orders</span></router-link>
