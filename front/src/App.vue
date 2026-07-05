@@ -1,13 +1,17 @@
 <script setup>
-import { computed } from 'vue'          // ← add this
-import { useRoute } from 'vue-router'   // ← add this
+import { computed } from 'vue'
+import { useRoute } from 'vue-router'
 import NavBar from './components/NavBar.vue'
 import Footer from './components/Footer.vue'
 
 const route = useRoute()
 
 const hideNavFooter = computed(() => {
-  return route.name === 'Landing' || route.path === '/'
+  return (
+    route.name === "Landing" ||
+    route.name === "Layout" ||
+    route.path === "/"
+  )
 })
 </script>
 
@@ -24,7 +28,6 @@ const hideNavFooter = computed(() => {
     <Footer v-if="!hideNavFooter" />
   </div>
 </template>
-
 
 <style>
 /* ===== GLOBAL RESET + FONT BASELINE ===== */
@@ -47,6 +50,8 @@ body {
   width: 100%;
   font-family: 'DM Sans', sans-serif;
   font-size: 1rem !important;
+  margin: 0;  /* ← ADD THIS */
+  padding: 0; /* ← ADD THIS */
 }
 
 #app {

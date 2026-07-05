@@ -2,6 +2,11 @@
   <div class="page">
     <svg style="display:none"><filter id="lg-dist" x="0%" y="0%" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency="0.008 0.008" numOctaves="2" seed="92" result="noise"/><feGaussianBlur in="noise" stdDeviation="2" result="blurred"/><feDisplacementMap in="SourceGraphic" in2="blurred" scale="50" xChannelSelector="R" yChannelSelector="G"/></filter></svg>
 
+    <!-- LEAVES -->
+    <div class="bg-scattered">
+      <div v-for="(img, i) in currentScattered" :key="'leaf-' + i" class="leaf-item" :style="{ left: img.x + '%', top: img.y + '%', width: img.width + '%', transform: `rotate(${img.rotation}deg)` }"><img :src="img.src" alt="" draggable="false" /></div>
+    </div>
+
     <!-- HERO -->
     <div class="hero-wrapper" :class="{ 'hero-settled': settled }">
       <div class="hero">
@@ -13,17 +18,11 @@
       </div>
     </div>
 
-    <!-- WHITE OVERLAY -->
     <div class="reveal-bg"></div>
 
-    <!-- BACKGROUND LEAVES (above white, below cards) -->
-    <div class="bg-leaves">
-      <img v-for="(leaf, i) in bgLeaves" :key="i" :src="leaf.src" class="bg-leaf" :style="{ left: leaf.x + 'px', top: leaf.y + 'px', width: leaf.width + 'px', transform: `rotate(${leaf.rotation}deg)` }" alt="" />
-    </div>
-
-    <!-- GLASS CARDS -->
+    <!-- CARDS -->
     <div class="card-field" :class="{ 'cards-visible': settled }">
-      <div v-for="i in 5" :key="'skeleton-' + i" class="glass-card skeleton" :class="[['lg','sm','md','sm','md'][i-1]]" :style="{ transform: `translate3d(${getPosition(i-1).x}px, ${getPosition(i-1).y}px, 0) rotate(${cards[i-1]?.rotate || 0}deg)`, zIndex: 1, opacity: settled && !loadedCards[i-1] ? 1 : 0 }"><div class="skeleton-shimmer"></div></div>
+      <div v-for="i in 5" :key="'skeleton-' + i" class="glass-card skeleton" :class="[['lg','sm','md','sm','md'][i-1]]" :style="{ transform: `translate3d(${getPosition(i-1).x}px, ${getPosition(i-1).y}px, 0) rotate(${cards[i-1]?.rotate || 0}deg)`, zIndex: 0, opacity: settled && !loadedCards[i-1] ? 1 : 0 }"><div class="skeleton-shimmer"></div></div>
       <div v-for="(card, index) in cards" :key="card.id" class="glass-card" :class="[card.style, card.size, { 'card-loaded': loadedCards[index] }]" :style="{ transform: `translate3d(${positions[card.id].x}px, ${positions[card.id].y}px, 0) rotate(${card.rotate}deg)`, zIndex: zIndexMap[card.id], opacity: loadedCards[index] ? 1 : 0 }" @mousedown="startDrag($event, card.id)" @touchstart="startDragTouch($event, card.id)">
         <span class="card-label">{{ card.label }}</span>
         <div v-if="card.style === 'distort'" class="glass-filter"></div>
@@ -41,57 +40,37 @@
     <!-- EXPLORE BUTTON -->
     <div class="cta-section" :class="{ 'cta-visible': settled }"><div class="btn-wrap" @click="togglePopup"><button class="glass-btn"><span>✨ Explore</span></button></div></div>
 
-    <!-- ABOUT -->
-    <div class="about-section" :class="{ 'about-visible': settled }">
-      <div class="about-content">
-        <span class="about-label">🌄 Pahad</span>
-        <h2 class="about-title">Pure <span class="highlight">Himalayan</span> Goodness</h2>
-        <p class="about-desc">From the mountains to your home — Pahadi cow ghee, handwoven pulla, organic rajmah, and wild gucchi mushrooms. <span class="about-highlight">No chemicals. No compromises. Just nature.</span></p>
-        <div class="about-tags"><span>🧈 Pahadi Ghee</span><span>👡 Himachali Pulla</span><span>🫘 Kumaoni Rajmah</span><span>🍄 Gucchi Mushroom</span></div>
-      </div>
-    </div>
+    <!-- STORY SECTION -->
+    <section class="story-section">
+      <p class="section-eyebrow">Our Story</p>
+      <h2 class="story-heading">Straight from the <span class="accent">Pahad</span>,<br>to your kitchen table</h2>
+      <p class="section-body">We're a small team sourcing genuinely traditional Himalayan produce — the way our grandparents made it, not the way a factory does. Everything we sell is made in small batches by families across Himachal, with nothing added and nothing cut out.</p>
+    </section>
 
-    <!-- PRODUCTS -->
-    <div class="products-section" :class="{ 'products-visible': settled }">
-      <h3 class="products-title">✨ Bestsellers</h3>
-      <div v-if="loading" class="product-grid"><div v-for="i in 4" :key="i" class="skeleton-card"></div></div>
-      <div v-else-if="products.length === 0" class="empty-state"><span>🍃</span><p>No products yet</p></div>
-      <div v-else class="product-grid">
-        <div v-for="product in visibleProducts" :key="product.id" class="product-card" @click="goToProduct(product)">
-          <div v-if="isOutOfStock(product)" class="corner-badge sold-out">Sold Out</div>
-          <div v-else-if="hasDiscount(product)" class="corner-badge discount">{{ product.discount.percent }}% Off</div>
-          <div class="product-thumb"><img v-if="primaryImage(product)" :src="primaryImage(product)" :alt="product.name" class="thumb-img" loading="lazy" /><div v-else class="emoji-fallback"><span>{{ product.emoji || '🌾' }}</span></div></div>
-          <div class="product-body">
-            <h4 class="product-name">{{ product.name }}</h4>
-            <p class="product-desc">{{ product.shortDesc || 'Pure Himalayan product.' }}</p>
-            <div class="product-footer"><div class="price-block"><span v-if="hasDiscount(product)" class="price-original">₹{{ getMinBasePrice(product) }}</span><span class="product-price">₹{{ displayPrice(product) }}</span></div></div>
-          </div>
+    <!-- PRODUCTS (only 3) -->
+    <section class="products-section">
+      <p class="section-eyebrow">From the shop</p>
+      <h2 class="section-heading">What people are loving</h2>
+      <div v-if="productsLoading" class="preview-loading">Loading…</div>
+      <div v-else-if="previewProducts.length === 0" class="preview-empty">Coming soon.</div>
+      <div v-else class="products-row">
+        <div v-for="p in previewProducts" :key="p.id" class="product-item" @click="goToProduct(p)">
+          <img v-if="primaryImage(p)" :src="primaryImage(p)" :alt="p.name" class="product-img" loading="lazy" />
+          <div v-else class="product-emoji">{{ p.emoji || '🌾' }}</div>
+          <h4 class="product-name">{{ p.name }}</h4>
+          <span class="product-price">₹{{ displayPrice(p) }}</span>
         </div>
       </div>
-    </div>
-
-    <!-- REVIEWS -->
-    <div class="reviews-section" :class="{ 'reviews-visible': settled }">
-      <h3 class="reviews-title">💬 Loved by our community</h3>
-      <div class="reviews-grid">
-        <div v-for="review in reviews" :key="review.name" class="review-item">
-          <div class="review-stars">★★★★★</div>
-          <p class="review-text">"{{ review.text }}"</p>
-          <span class="review-author">— {{ review.name }}</span>
-        </div>
-      </div>
-    </div>
+      <button class="see-all" @click="router.push('/products')">See all →</button>
+    </section>
 
     <!-- SOCIAL -->
-    <div class="social-section" :class="{ 'social-visible': settled }">
-      <span class="social-label">Follow the Pahad journey</span>
+    <section class="social-section">
+      <p class="section-eyebrow">Follow the journey</p>
       <div class="social-links">
-        <a href="#" class="social-link">📸 Instagram</a>
-        <a href="#" class="social-link">📘 Facebook</a>
-        <a href="#" class="social-link">🐦 Twitter</a>
-        <a href="#" class="social-link">📌 Pinterest</a>
+        <a v-for="s in socialLinks" :key="s.label" :href="s.href" class="social-link" target="_blank" rel="noopener">{{ s.emoji }} {{ s.label }}</a>
       </div>
-    </div>
+    </section>
 
     <!-- POPUP -->
     <div v-if="showPopup" class="popup-overlay" @click="closePopup">
@@ -119,31 +98,6 @@ const loadedCards = ref([false, false, false, false, false])
 const imageLoaded = ref([false, false, false, false, false])
 const screenWidth = ref(window.innerWidth)
 
-// ─── BACKGROUND LEAVES ───
-const bgLeaves = [
-  { src: '/images/image1.png', x: -18, y: 38, width: 258, rotation: 0 },
-  { src: '/images/image2.png', x: 577, y: 606, width: 150, rotation: 0 },
-  { src: '/images/image3.png', x: 286, y: -5, width: 150, rotation: -250 },
-  { src: '/images/image4.png', x: 1034, y: 389, width: 254, rotation: -360 },
-  { src: '/images/image5.png', x: 1022, y: -14, width: 265, rotation: 0 },
-  { src: '/images/image1.png', x: -12, y: 869, width: 301, rotation: 0 },
-  { src: '/images/image1.png', x: 1013, y: 769, width: 322, rotation: -165 },
-]
-
-// ─── PRODUCTS ───
-const allProducts = ref([])
-const loading = ref(true)
-const DISPLAY_LIMIT = 4
-const products = computed(() => allProducts.value.slice(0, DISPLAY_LIMIT))
-const visibleProducts = computed(() => products.value)
-const hasDiscount = (p) => p.discount?.isDiscounted && p.discount?.percent > 0
-const isOutOfStock = (p) => p.stock === 0
-const getMinBasePrice = (p) => { if (p.variants && p.variants.length > 0) return Math.min(...p.variants.map(v => Number(v.price))); return p.price || 0 }
-const displayPrice = (p) => { const minBase = getMinBasePrice(p); return hasDiscount(p) ? Math.round(minBase * (1 - p.discount.percent / 100)) : minBase }
-const primaryImage = (p) => p.imageUrls?.find(u => u?.trim()) ?? null
-const generateSlug = (name) => name ? name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '') : 'product'
-const goToProduct = (product) => router.push(`/product/${generateSlug(product.name)}--${product.id}`)
-
 // ─── IMAGES ───
 const IMAGE_1 = 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&h=400&fit=crop&crop=face'
 const IMAGE_2 = 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400&h=400&fit=crop&crop=face'
@@ -164,10 +118,47 @@ const cards = [
   { id: 'c5', style: 'frosted', size: 'md', label: 'Simple Frosted', rotate: -8, image: IMAGE_5, lowQualityImage: LOW_QUALITY_5 },
 ]
 
-const reviews = [
-  { name: 'Priya S.', text: 'The Pahadi ghee is unlike anything I\'ve tasted. Pure and golden.' },
-  { name: 'Amit R.', text: 'Gucchi mushrooms are a Himalayan treasure. Truly exceptional.' },
-]
+// ─── LEAVES ────────────────────────────────────────────────────────────────
+const scatteredByBreakpoint = {
+  desktop: [
+    { src: '/images/image1.avif', x: 45, y: 7, width: 16, rotation: -70 },
+    { src: '/images/image2.avif', x: 21.5, y: 80.5, width: 10, rotation: 390 },
+    { src: '/images/image3.avif', x: 25.5, y: -1.5, width: 9.5, rotation: -245 },
+    { src: '/images/image4.avif', x: 73.43666702411234, y: 200.4175654853623, width: 26.5, rotation: 0 },
+    { src: '/images/image7.avif', x: 69.49982255379554, y: -0.22958397534668679, width: 34, rotation: 0 },
+    { src: '/images/image8.avif', x: 74, y: 102, width: 31, rotation: -5 },
+    { src: '/images/image9.avif', x: 0.2440944881889768, y: 0.6070878274268605, width: 23.6, rotation: 0 },
+    { src: '/images/image11.avif', x: -2.5, y: 106, width: 47, rotation: 190 },
+    { src: '/images/image12.avif', x: 5.629921259842518, y: 178.30508474576268, width: 16, rotation: 40 }
+  ],
+  tablet: [
+    { src: '/images/image1.avif', x: 42.29268292682925, y: 10.08782742681048, width: 26, rotation: -45 },
+    { src: '/images/image2.avif', x: 67.5, y: 93, width: 15.5, rotation: 275 },
+    { src: '/images/image3.avif', x: 4.5, y: 79.5, width: 9, rotation: -245 },
+    { src: '/images/image4.avif', x: 66.67080745341613, y: 218.37442218798145, width: 33, rotation: 0 },
+    { src: '/images/image7.avif', x: 66.53658536585358, y: 0.5408320493066252, width: 33.5, rotation: 0 },
+    { src: '/images/image8.avif', x: 62.5, y: 109.5, width: 44.5, rotation: 0 },
+    { src: '/images/image9.avif', x: 0.2317073170731706, y: 0.46224961479198773, width: 27.5, rotation: 0 },
+    { src: '/images/image11.avif', x: 0, y: 104, width: 59, rotation: 180 },
+    { src: '/images/image12.avif', x: -2.980487804878048, y: 150, width: 20, rotation: 10 }
+  ],
+  mobile: [
+    { src: '/images/image1.avif', x: 52.264102564102544, y: 6.019414483821265, width: 32, rotation: -50 },
+    { src: '/images/image2.avif', x: 2.5, y: 120, width: 20.5, rotation: 75 },
+    { src: '/images/image3.avif', x: 16.88461538461537, y: -1.6571648690292755, width: 12.5, rotation: -245 },
+    { src: '/images/image4.avif', x: 46.5, y:130, width: 54, rotation: 360 },
+    { src: '/images/image7.avif', x: 61.12820512820514, y: 0.17041602465331301, width: 40, rotation: 0 },
+    { src: '/images/image8.avif', x: 51.5, y: 52, width: 56.5, rotation: 0 },
+    { src: '/images/image9.avif', x: -8.430769230769226, y: 0.15408320493066296, width: 44.5, rotation: 0 },
+    { src: '/images/image11.avif', x: -4, y: 45, width: 65, rotation: 550 },
+    { src: '/images/image12.avif', x: 14.902564102564089, y: 4.44684129429891, width: 44.5, rotation: 15 }
+  ]
+};
+
+
+
+const getBreakpoint = (w) => (w < 768 ? 'mobile' : w < 1024 ? 'tablet' : 'desktop')
+const currentScattered = computed(() => scatteredByBreakpoint[getBreakpoint(screenWidth.value)])
 
 const onImageLoad = (index) => { imageLoaded.value[index] = true; loadedCards.value[index] = true }
 const preloadImages = () => { const imageUrls = cards.map(c => c.image).filter(Boolean); let loaded = 0; imageUrls.forEach(url => { const img = new Image(); img.onload = () => { loaded++ }; img.onerror = () => { loaded++ }; img.src = url }) }
@@ -175,26 +166,41 @@ const preloadImages = () => { const imageUrls = cards.map(c => c.image).filter(B
 // ─── CARD POSITIONS ───
 const getPosition = (index) => {
   const w = screenWidth.value; const isMobile = w < 480; const isTablet = w < 768
-  const positions = [{ x: -310, y: -10 }, { x: -90, y: 0 }, { x: 330, y: -40 }, { x:100, y: 5 }, { x: 325, y: 150 }]
+  const positions = [{ x: -310, y: -10 }, { x: -90, y: 0 }, { x: 330, y: -40 }, { x: 100, y: 5 }, { x: 325, y: 150 }]
   let scale = 1; if (isMobile) scale = 0.35; else if (isTablet) scale = 0.55
   return { x: positions[index].x * scale, y: positions[index].y * scale }
 }
 
 const positions = reactive({ c1: { x: getPosition(0).x, y: getPosition(0).y }, c2: { x: getPosition(1).x, y: getPosition(1).y }, c3: { x: getPosition(2).x, y: getPosition(2).y }, c4: { x: getPosition(3).x, y: getPosition(3).y }, c5: { x: getPosition(4).x, y: getPosition(4).y } })
-const draggedCards = ref([])
-const updatePositions = () => { screenWidth.value = window.innerWidth; const keys = ['c1', 'c2', 'c3', 'c4', 'c5']; keys.forEach((key, i) => { if (!draggedCards.value.includes(key)) { const pos = getPosition(i); positions[key].x = pos.x; positions[key].y = pos.y } }) }
+const draggedCards = reactive({ c1: false, c2: false, c3: false, c4: false, c5: false })
+const updatePositions = () => { const prev = getBreakpoint(screenWidth.value); screenWidth.value = window.innerWidth; if (getBreakpoint(screenWidth.value) === prev) return; const keys = ['c1','c2','c3','c4','c5']; keys.forEach((key, i) => { if (draggedCards[key]) return; const pos = getPosition(i); positions[key].x = pos.x; positions[key].y = pos.y }) }
 
 let zCounter = 10; const zIndexMap = reactive({ c1: 1, c2: 2, c3: 3, c4: 4, c5: 5 }); const dragState = ref({ active: false, id: null, startX: 0, startY: 0, origX: 0, origY: 0 })
 function bringToFront(id) { zCounter += 1; zIndexMap[id] = zCounter }
-function startDrag(e, id) { e.preventDefault(); bringToFront(id); if (!draggedCards.value.includes(id)) draggedCards.value.push(id); dragState.value = { active: true, id, startX: e.clientX, startY: e.clientY, origX: positions[id].x, origY: positions[id].y } }
+function startDrag(e, id) { e.preventDefault(); bringToFront(id); draggedCards[id] = true; dragState.value = { active: true, id, startX: e.clientX, startY: e.clientY, origX: positions[id].x, origY: positions[id].y } }
 function onMouseMove(e) { if (!dragState.value.active) return; const { id, startX, startY, origX, origY } = dragState.value; positions[id].x = origX + (e.clientX - startX); positions[id].y = origY + (e.clientY - startY) }
 function onMouseUp() { dragState.value.active = false }
-function startDragTouch(e, id) { e.preventDefault(); bringToFront(id); if (!draggedCards.value.includes(id)) draggedCards.value.push(id); const touch = e.touches[0]; dragState.value = { active: true, id, startX: touch.clientX, startY: touch.clientY, origX: positions[id].x, origY: positions[id].y } }
+function startDragTouch(e, id) { e.preventDefault(); bringToFront(id); draggedCards[id] = true; const touch = e.touches[0]; dragState.value = { active: true, id, startX: touch.clientX, startY: touch.clientY, origX: positions[id].x, origY: positions[id].y } }
 function onTouchMove(e) { if (!dragState.value.active) return; e.preventDefault(); const touch = e.touches[0]; const { id, startX, startY, origX, origY } = dragState.value; positions[id].x = origX + (touch.clientX - startX); positions[id].y = origY + (touch.clientY - startY) }
 function onTouchEnd() { dragState.value.active = false }
 
+// ─── PRODUCTS ───
+const allProducts = ref([])
+const productsLoading = ref(true)
+const previewProducts = computed(() => allProducts.value.slice(0, 3))
+
+const generateSlug = (name) => name ? name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '') : 'product'
+const goToProduct = (product) => router.push(`/product/${generateSlug(product.name)}--${product.id}`)
+const hasDiscount = (p) => p.discount?.isDiscounted && p.discount?.percent > 0
+const getMinBasePrice = (p) => { if (p.variants && p.variants.length > 0) return Math.min(...p.variants.map(v => Number(v.price))); return p.price || 0 }
+const displayPrice = (p) => { const minBase = getMinBasePrice(p); return hasDiscount(p) ? Math.round(minBase * (1 - p.discount.percent / 100)) : minBase }
+const primaryImage = (p) => p.imageUrls?.find(u => u?.trim()) ?? null
+
+// ─── SOCIAL ───
+const socialLinks = [ { label: 'Instagram', emoji: '📷', href: '#' }, { label: 'Facebook', emoji: '📘', href: '#' }, { label: 'YouTube', emoji: '▶️', href: '#' } ]
+
 onMounted(async () => {
-  try { loading.value = true; allProducts.value = await fetchActiveProducts() } catch (e) { console.error(e) } finally { loading.value = false }
+  try { productsLoading.value = true; allProducts.value = await fetchActiveProducts() } catch (e) { console.error(e) } finally { productsLoading.value = false }
   preloadImages()
   window.addEventListener('resize', updatePositions)
   window.addEventListener('mousemove', onMouseMove); window.addEventListener('mouseup', onMouseUp)
@@ -202,32 +208,65 @@ onMounted(async () => {
   setTimeout(async () => { await nextTick(); requestAnimationFrame(() => { settled.value = true }); cards.forEach((_, i) => { setTimeout(() => { loadedCards.value[i] = true }, 4700 + i * 200) }) }, 4500)
 })
 onUnmounted(() => { window.removeEventListener('resize', updatePositions); window.removeEventListener('mousemove', onMouseMove); window.removeEventListener('mouseup', onMouseUp); window.removeEventListener('touchmove', onTouchMove); window.removeEventListener('touchend', onTouchEnd) })
+
+
+
 </script>
 
 <style scoped>
-/* ============================================================
-   🔧  EASY CUSTOMIZATION
-   ============================================================ */
-.page{--glass-bg:rgba(5,54,8,0.934);--glass-blur:8px;--glass-border:rgba(6,45,6,0.931);--glass-shadow:0 4px 24px rgba(46,125,50,0.55);--text-color:#fff;--overlay-bg:rgba(0,0,0,.35);--overlay-blur:6px;--popup-bg:rgba(20,20,20,0.75);--popup-blur:14px;--popup-border:rgba(255,255,255,0.12);--popup-text:#fff;--green:rgba(46,125,50,0.35);--green-hover:rgba(46,125,50,0.6);--orange:rgba(255,152,0,0.35);--orange-hover:rgba(255,152,0,0.6);--anim-speed:.25s;--hover-scale:1.04;--lg-bg:rgba(255,255,255,0.45);--lg-highlight:rgba(255,255,255,0.9);--lg-border:rgba(255,255,255,0.6);--premium-green:#2E7D32;position:relative;min-height:100vh;height:auto;overflow:visible;background:linear-gradient(135deg,#0F2A1F,#2A5C3E)}
+/* ─── VARIABLES ─── */
 
-/* ─── WHITE OVERLAY ─── */
+
+
+.page {
+  outline: 2px solid red !important;
+  --glass-bg: rgba(5,54,8,0.934);
+  --glass-blur: 8px;
+  --glass-border: rgba(6,45,6,0.931);
+  --glass-shadow: 0 4px 24px rgba(46,125,50,0.55);
+  --text-color: #fff;
+  --overlay-bg: rgba(0,0,0,.35);
+  --overlay-blur: 6px;
+  --popup-bg: rgba(20,20,20,0.75);
+  --popup-blur: 14px;
+  --popup-border: rgba(255,255,255,0.12);
+  --popup-text: #fff;
+  --green: rgba(46,125,50,0.35);
+  --green-hover: rgba(46,125,50,0.6);
+  --orange: rgba(255,152,0,0.35);
+  --orange-hover: rgba(255,152,0,0.6);
+  --anim-speed: .25s;
+  --hover-scale: 1.04;
+  --lg-bg: rgba(255,255,255,0.45);
+  --lg-highlight: rgba(255,255,255,0.9);
+  --lg-border: rgba(255,255,255,0.6);
+  --premium-green: #2E7D32;
+  position: relative;
+  min-height: 100vh;
+  background: linear-gradient(135deg, #0F2A1F, #2A5C3E);
+  padding-bottom: 40px;
+  max-width: 1440px;
+  width: 100%;          /* ← ADD THIS */
+  margin: 0 auto;
+  overflow-x: hidden;
+}
+
+/* REMOVED: overflow-x: hidden — was clipping leaves that bleed past the edge */
+*{box-sizing:border-box}
 .reveal-bg{position:absolute;inset:0;background:#fdfdfb;opacity:0;z-index:0;pointer-events:none;animation:revealBg .6s ease-out 4.5s forwards}
 @keyframes revealBg{to{opacity:1}}
 
-/* ─── BACKGROUND LEAVES (above white overlay) ─── */
-.bg-leaves{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:1;overflow:hidden}
-.bg-leaf{position:absolute;object-fit:contain;opacity:0.85;user-select:none;-webkit-user-drag:none;pointer-events:none;max-width:30vw;max-height:30vh}
-@media(max-width:768px){.bg-leaf{max-width:25vw;max-height:25vh;opacity:0.35}}
-@media(max-width:480px){.bg-leaf{max-width:35vw;max-height:20vh;opacity:0.25}}
-@media(max-width:380px){.bg-leaf{max-width:40vw;max-height:18vh;opacity:0.2}}
+/* ─── LEAVES ─── */
+.bg-scattered{position:absolute;top:0;left:0;width:100%;height:100vh;z-index:1;pointer-events:none;overflow:visible}
+.leaf-item{position:absolute;line-height:0}
+.leaf-item img{width:100%;display:block;pointer-events:none;user-select:none;-webkit-user-drag:none}
 
 /* ─── HERO ─── */
-*{box-sizing:border-box}
 .hero-wrapper{position:relative;z-index:2;display:flex;align-items:center;justify-content:center;height:100vh;max-height:100vh;padding:20px;will-change:transform;transition:transform 1.1s cubic-bezier(.25,1,.35,1);transform:translate3d(0,0,0)}
 .hero-wrapper.hero-settled{height:auto;max-height:none;min-height:0;padding-top:20px;transform:scale3d(.7,.7,1) translate3d(0,0,0);transform-origin:top center}
 .hero{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:10px}
-.brand{display:flex;font-family:Georgia,serif;font-size:5rem;font-weight:700;margin:0;flex-wrap:wrap;justify-content:center;opacity:1;animation:fadeIn .5s ease-out backwards;will-change:opacity,color;transition:color .8s cubic-bezier(.25,1,.35,1)}
-@keyframes fadeIn{0%{opacity:0}100%{opacity:1}}
+.brand{display:flex;font-family:Georgia,serif;font-size:5rem;font-weight:700;margin:0;opacity:0;flex-wrap:wrap;justify-content:center;animation:fadeIn .5s ease-out forwards;will-change:opacity,color;transition:color .8s cubic-bezier(.25,1,.35,1)}
+@keyframes fadeIn{to{opacity:1}}
 .brand-dark .pahad-dark,.pahad-dark{color:var(--premium-green)!important}
 .brand-dark .s-color-dark,.s-color-dark{color:var(--premium-green)!important;opacity:1!important}
 .brand-dark .s-masked-dark,.s-masked-dark{opacity:0!important}
@@ -241,12 +280,12 @@ onUnmounted(() => { window.removeEventListener('resize', updatePositions); windo
 .s-masked{opacity:0;color:transparent;background-image:url('https://images.unsplash.com/photo-1732535725600-f805d8b33c9c?q=80&w=1470&auto=format&fit=crop');background-size:300%;background-position:100% 50%;background-clip:text;-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:fadeInS .5s ease-out 1.8s forwards,maskPan 1s linear 1.8s infinite;will-change:opacity,background-position;transition:opacity .8s cubic-bezier(.25,1,.35,1)}
 @keyframes fadeInS{to{opacity:1}}
 @keyframes maskPan{0%{background-position:100% 50%}100%{background-position:0% 50%}}
-.tagline{font-family:Inter,sans-serif;font-size:1.1rem;color:rgba(245,237,224,.6);margin-top:16px;letter-spacing:6px;font-weight:300;text-align:center;opacity:1;animation:slideUp .6s ease-out .4s backwards;will-change:opacity,transform,color;transition:color .8s cubic-bezier(.25,1,.35,1)}
+.tagline{font-family:Inter,sans-serif;font-size:1.1rem;color:rgba(245,237,224,.6);margin-top:16px;letter-spacing:6px;font-weight:300;text-align:center;animation:slideUp .6s ease-out .4s both;will-change:opacity,transform,color;transition:color .8s cubic-bezier(.25,1,.35,1)}
 @keyframes slideUp{0%{opacity:0;transform:translateY(30px)}100%{opacity:1;transform:translateY(0)}}
 .tagline-dark{color:rgba(46,125,50,.7)!important}
 
 /* ─── CARDS ─── */
-.card-field{position:relative;z-index:2;width:100%;min-height:380px;display:flex;align-items:center;justify-content:center;opacity:0;transform:translate3d(0,30px,0);transition:opacity .8s cubic-bezier(.25,1,.35,1),transform .8s cubic-bezier(.25,1,.35,1);pointer-events:none;will-change:opacity,transform;padding:20px 10px}
+.card-field{position:relative;z-index:1;width:100%;min-height:380px;display:flex;align-items:center;justify-content:center;opacity:0;transform:translate3d(0,30px,0);transition:opacity .8s cubic-bezier(.25,1,.35,1),transform .8s cubic-bezier(.25,1,.35,1);pointer-events:none;will-change:opacity,transform;padding:20px 10px}
 .card-field.cards-visible{opacity:1;transform:translate3d(0,0,0);pointer-events:auto}
 .glass-card{position:absolute;cursor:grab;user-select:none;-webkit-user-select:none;touch-action:none;border-radius:1.6rem;overflow:hidden;box-shadow:0 12px 30px rgba(0,0,0,.12),0 2px 8px rgba(0,0,0,.06);transition:box-shadow .2s,opacity .5s cubic-bezier(.25,1,.35,1);will-change:transform,opacity;backface-visibility:hidden;-webkit-backface-visibility:hidden;transform:translate3d(0,0,0);opacity:.01}
 .glass-card.card-loaded{opacity:1}
@@ -279,64 +318,37 @@ onUnmounted(() => { window.removeEventListener('resize', updatePositions); windo
 .btn-wrap{cursor:pointer;transition:transform var(--anim-speed) ease;will-change:transform}
 .btn-wrap:hover{transform:scale(var(--hover-scale))}
 .btn-wrap:active{transform:scale(.96)}
-.glass-btn{all:unset;cursor:pointer;position:relative;display:flex;align-items:center;justify-content:center;padding:40px 45px!important;border-radius:40px;font-family:Inter,sans-serif;font-size:1rem;font-weight:600;color:#fff;margin-top:50px;background:rgba(1,54,2,.885);text-shadow:0 1px 3px rgba(0,0,0,.15);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border:1px solid rgba(93,217,99,.25);box-shadow:0 4px 24px rgba(38,151,44,.488),inset 0 1px 0 rgba(255,255,255,.15);transition:all var(--anim-speed) ease;will-change:transform;letter-spacing:.3px}
+.glass-btn{all:unset;cursor:pointer;position:relative;display:flex;align-items:center;justify-content:center;padding:40px 45px!important;border-radius:40px;font-family:Inter,sans-serif;font-size:.75rem;font-weight:600;color:#fff;margin-top:40px;background:rgba(1,54,2,.885);text-shadow:0 1px 3px rgba(0,0,0,.15);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border:1px solid rgba(93,217,99,.25);box-shadow:0 4px 24px rgba(38,151,44,.488),inset 0 1px 0 rgba(255,255,255,.15);transition:all var(--anim-speed) ease;will-change:transform;letter-spacing:.3px}
 .glass-btn:hover{background:rgba(32,200,37,.934);box-shadow:0 6px 32px rgba(3,33,4,.2),inset 0 1px 0 rgba(255,255,255,.2);border-color:rgba(8,40,10,.891)}
 .glass-btn:active{transform:scale(.96)}
 .glass-btn span{position:relative;z-index:1}
 
-/* ─── ABOUT ─── */
-.about-section{position:relative;z-index:4;max-width:800px;margin:0 auto;padding:30px 24px;opacity:0;transform:translateY(20px);transition:opacity .8s cubic-bezier(.25,1,.35,1),transform .8s cubic-bezier(.25,1,.35,1);will-change:opacity,transform}
-.about-section.about-visible{opacity:1;transform:translateY(0)}
-.about-content{text-align:center}
-.about-label{font-family:Inter,sans-serif;font-size:.7rem;text-transform:uppercase;letter-spacing:4px;color:#2E7D32;font-weight:600;display:block;margin-bottom:4px}
-.about-title{font-family:Georgia,serif;font-size:2.4rem;font-weight:700;color:#1a2a1a;margin:0 0 12px}
-.about-title .highlight{background:linear-gradient(135deg,#2E7D32,#4CAF50);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
-.about-desc{font-family:Inter,sans-serif;font-size:1.05rem;line-height:1.7;color:#3a4a3a;max-width:600px;margin:0 auto 16px}
-.about-highlight{color:#2E7D32;font-weight:500}
-.about-tags{display:flex;flex-wrap:wrap;justify-content:center;gap:10px}
-.about-tags span{font-family:Inter,sans-serif;font-size:.8rem;padding:4px 14px;background:rgba(46,125,50,.08);border-radius:20px;color:#2E7D32;border:1px solid rgba(46,125,50,.1)}
+/* ─── STORY ─── */
+.story-section{position:relative;z-index:1;max-width:800px;margin:0 auto;padding:60px 32px;text-align:center}
+.section-eyebrow{font-family:Inter,sans-serif;font-size:.75rem;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:var(--premium-green);margin:0 0 12px}
+.story-heading{font-family:Georgia,serif;font-size:2.8rem;font-weight:700;line-height:1.3;color:#1a2a1a;margin:0 0 20px}
+.story-heading .accent{color:var(--premium-green)}
+.section-body{font-family:Inter,sans-serif;font-size:1.05rem;line-height:1.8;color:rgba(26,42,26,.75);max-width:640px;margin:0 auto}
 
 /* ─── PRODUCTS ─── */
-.products-section{position:relative;z-index:4;max-width:900px;margin:0 auto;padding:20px 24px 30px;opacity:0;transform:translateY(20px);transition:opacity .8s cubic-bezier(.25,1,.35,1),transform .8s cubic-bezier(.25,1,.35,1);will-change:opacity,transform}
-.products-section.products-visible{opacity:1;transform:translateY(0)}
-.products-title{font-family:Georgia,serif;font-size:1.6rem;font-weight:600;color:#1a2a1a;text-align:center;margin-bottom:20px}
-.product-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
-.skeleton-card{height:240px;background:linear-gradient(90deg,#E8ECF0 25%,#F1F4F8 50%,#E8ECF0 75%);background-size:200% 100%;border-radius:12px;animation:shimmer 1.2s infinite}
-.product-card{background:rgba(255,255,255,.4);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border-radius:14px;overflow:hidden;border:1px solid rgba(255,255,255,.2);transition:all .25s ease;cursor:pointer;display:flex;flex-direction:column;position:relative}
-.product-card:hover{transform:translateY(-4px);background:rgba(255,255,255,.6);box-shadow:0 8px 24px rgba(0,0,0,.06)}
-.corner-badge{position:absolute;top:8px;left:8px;z-index:2;font-size:.55rem;font-weight:700;padding:2px 10px;border-radius:12px}
-.corner-badge.discount{background:#2E7D32;color:#fff}
-.corner-badge.sold-out{background:#94A3B8;color:#fff}
-.product-thumb{width:100%;aspect-ratio:1/1;background:rgba(245,245,240,.3);display:flex;align-items:center;justify-content:center;overflow:hidden}
-.thumb-img{width:100%;height:100%;object-fit:contain;padding:6px}
-.emoji-fallback{font-size:36px}
-.product-body{padding:10px 12px 12px;flex:1;display:flex;flex-direction:column}
-.product-name{font-family:Inter,sans-serif;font-size:.9rem;font-weight:600;color:#1a2a1a;margin:0 0 2px;line-height:1.3;overflow:hidden;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2}
-.product-desc{font-size:.75rem;color:#5a6a5a;line-height:1.4;flex:1;margin-bottom:6px;overflow:hidden;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2}
-.product-footer{display:flex;align-items:center;justify-content:space-between;margin-top:auto}
-.price-original{font-size:.7rem;color:#94A3B8;text-decoration:line-through;margin-right:4px}
-.product-price{font-size:1rem;font-weight:700;color:#1a3a1a}
-.empty-state{text-align:center;padding:30px 20px;color:#64748B}
-.empty-state span{font-size:40px;display:block;margin-bottom:8px}
-
-/* ─── REVIEWS ─── */
-.reviews-section{position:relative;z-index:4;max-width:600px;margin:0 auto;padding:20px 24px 30px;opacity:0;transform:translateY(20px);transition:opacity .8s cubic-bezier(.25,1,.35,1),transform .8s cubic-bezier(.25,1,.35,1);will-change:opacity,transform}
-.reviews-section.reviews-visible{opacity:1;transform:translateY(0)}
-.reviews-title{font-family:Georgia,serif;font-size:1.3rem;font-weight:600;color:#1a2a1a;text-align:center;margin-bottom:16px}
-.reviews-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-.review-item{background:rgba(255,255,255,.15);padding:16px 18px;border-radius:12px;border:1px solid rgba(255,255,255,.1);transition:all .25s ease}
-.review-item:hover{background:rgba(255,255,255,.25)}
-.review-stars{color:#f5b342;font-size:.8rem;letter-spacing:1px;margin-bottom:2px}
-.review-text{font-family:Inter,sans-serif;font-size:.85rem;line-height:1.5;color:#2a3a2a;font-style:italic;margin:0 0 4px}
-.review-author{font-family:Inter,sans-serif;font-size:.75rem;color:#4a5a4a;font-weight:500}
+.products-section{position:relative;z-index:1;max-width:900px;margin:0 auto;padding:40px 32px 60px;text-align:center}
+.section-heading{font-family:Georgia,serif;font-size:2rem;font-weight:700;color:#1a2a1a;margin:0 0 24px}
+.products-row{display:flex;justify-content:center;gap:40px;margin-top:32px;flex-wrap:wrap}
+.product-item{width:180px;cursor:pointer;text-align:left}
+.product-img{width:180px;height:180px;object-fit:cover;border-radius:1.2rem;display:block;margin-bottom:12px;transition:transform .3s ease}
+.product-item:hover .product-img{transform:scale(1.03)}
+.product-emoji{width:180px;height:180px;display:flex;align-items:center;justify-content:center;font-size:2.5rem;background:rgba(46,125,50,.08);border-radius:1.2rem;margin-bottom:12px}
+.product-name{font-family:Inter,sans-serif;font-size:.95rem;font-weight:600;color:#1a2a1a;margin:0 0 4px}
+.product-price{font-family:Inter,sans-serif;font-size:.9rem;font-weight:600;color:var(--premium-green)}
+.preview-loading,.preview-empty{font-family:Inter,sans-serif;color:rgba(26,42,26,.5);margin-top:32px}
+.see-all{all:unset;cursor:pointer;margin-top:24px;font-family:Inter,sans-serif;font-size:.9rem;font-weight:600;color:var(--premium-green);border-bottom:1px solid transparent;transition:border-color .2s ease}
+.see-all:hover{border-color:var(--premium-green)}
 
 /* ─── SOCIAL ─── */
-.social-section{position:relative;z-index:4;max-width:500px;margin:0 auto;padding:16px 24px 30px;text-align:center;opacity:0;transform:translateY(20px);transition:opacity .8s cubic-bezier(.25,1,.35,1),transform .8s cubic-bezier(.25,1,.35,1);will-change:opacity,transform}
-.social-section.social-visible{opacity:1;transform:translateY(0)}
-.social-label{font-family:Inter,sans-serif;font-size:.8rem;color:#4a5a4a;display:block;margin-bottom:10px;letter-spacing:.5px}
-.social-links{display:flex;flex-wrap:wrap;justify-content:center;gap:10px}
-.social-link{font-family:Inter,sans-serif;font-size:.8rem;color:#2a3a2a;text-decoration:none;padding:5px 14px;background:rgba(255,255,255,.25);border-radius:30px;border:1px solid rgba(255,255,255,.12);transition:all .25s ease}
-.social-link:hover{background:rgba(46,125,50,.08);border-color:rgba(46,125,50,.2);transform:translateY(-2px)}
+.social-section{position:relative;z-index:1;max-width:500px;margin:0 auto;padding:30px 32px 60px;text-align:center}
+.social-links{display:flex;justify-content:center;gap:28px;margin-top:16px;flex-wrap:wrap}
+.social-link{font-family:Inter,sans-serif;font-size:.95rem;font-weight:600;color:#1a2a1a;text-decoration:none;border-bottom:1px solid transparent;transition:border-color .2s ease,color .2s ease}
+.social-link:hover{color:var(--premium-green);border-color:var(--premium-green)}
 
 /* ─── POPUP ─── */
 .popup-overlay{position:fixed;inset:0;background:rgba(0,0,0,.35);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;z-index:1000;animation:fadeInPopup .3s ease;will-change:opacity}
@@ -353,8 +365,9 @@ onUnmounted(() => { window.removeEventListener('resize', updatePositions); windo
 .popup-btn.orange:hover{background:rgba(255,152,0,.6);border-color:rgba(255,152,0,.4);box-shadow:0 8px 40px rgba(255,152,0,.3)}
 
 /* ─── RESPONSIVE ─── */
-@media(max-width:1024px){.glass-card.lg{width:220px;height:220px}.glass-card.md{width:190px;height:190px}.glass-card.sm{width:160px;height:320px}.product-grid{grid-template-columns:repeat(2,1fr)}}
-@media(max-width:768px){.brand{font-size:4.2rem}.tagline{font-size:1.1rem;letter-spacing:5px;margin-top:14px}.hero-wrapper.hero-settled{transform:scale3d(.65,.65,1) translate3d(0,0,0);padding-top:18px}.glass-card.lg{width:160px;height:160px}.glass-card.md{width:135px;height:135px}.glass-card.sm{width:120px;height:240px}.card-field{min-height:280px;padding:10px}.cta-section{padding:30px 20px 20px}.glass-btn{padding:25px 30px!important;margin-top:30px;font-size:.9rem}.popup-btn{padding:14px 36px;font-size:1rem;min-width:160px}.popup-box{gap:12px}.glass-card{cursor:default}.glass-card:active{transform:scale(1.02)}.about-title{font-size:1.8rem}.about-desc{font-size:.95rem}.product-grid{grid-template-columns:repeat(2,1fr)}.reviews-grid{grid-template-columns:1fr}}
-@media(max-width:480px){.brand{font-size:3.4rem}.tagline{font-size:1rem;letter-spacing:4px;margin-top:14px}.hero-wrapper.hero-settled{transform:scale3d(.55,.55,1) translate3d(0,0,0);padding-top:16px}.hero{padding:8px}.glass-card.lg{width:120px;height:120px}.glass-card.md{width:105px;height:105px}.glass-card.sm{width:90px;height:180px}.card-field{min-height:200px;padding:5px}.card-label{font-size:.5rem;top:6px;left:8px;padding:2px 8px}.cta-section{padding:24px 20px 16px}.glass-btn{padding:20px 25px!important;margin-top:20px;font-size:.8rem}.popup-btn{padding:12px 28px;font-size:.9rem;min-width:140px}.popup-box{gap:10px}.about-title{font-size:1.4rem}.about-desc{font-size:.85rem}.about-tags span{font-size:.7rem;padding:3px 10px}.product-grid{grid-template-columns:repeat(2,1fr);gap:10px}.products-title{font-size:1.3rem}.social-link{font-size:.7rem;padding:4px 10px}.reviews-title{font-size:1.1rem}.review-text{font-size:.8rem}}
-@media(max-width:380px){.brand{font-size:2.8rem}.tagline{font-size:.85rem;letter-spacing:3px;margin-top:10px}.hero-wrapper.hero-settled{transform:scale3d(.5,.5,1) translate3d(0,0,0);padding-top:14px}.glass-card.lg{width:95px;height:95px}.glass-card.md{width:85px;height:85px}.glass-card.sm{width:75px;height:150px}.card-field{min-height:160px}.cta-section{padding:16px 16px 12px}.glass-btn{padding:15px 20px!important;margin-top:15px;font-size:.75rem}.popup-btn{padding:10px 20px;font-size:.8rem;min-width:120px}}
+@media(max-width:1024px){.glass-card.lg{width:220px;height:220px}.glass-card.md{width:190px;height:190px}.glass-card.sm{width:160px;height:320px}}
+@media(max-width:768px){.brand{font-size:4.2rem}.tagline{font-size:1.1rem;letter-spacing:5px}.hero-wrapper.hero-settled{transform:scale3d(.65,.65,1) translate3d(0,0,0);padding-top:18px}.glass-card.lg{width:160px;height:160px}.glass-card.md{width:135px;height:135px}.glass-card.sm{width:120px;height:240px}.card-field{min-height:280px;padding:10px}.cta-section{padding:30px 20px 20px}.glass-btn{height:36px;font-size:.7rem;padding:6px 10px}.popup-btn{padding:14px 36px;font-size:1rem;min-width:160px}.popup-box{gap:12px}.story-heading{font-size:2.2rem}.section-heading{font-size:1.6rem}.products-row{gap:24px}.product-item{width:140px}.product-img{width:140px;height:140px}.product-emoji{width:140px;height:140px}}
+@media(max-width:480px){.brand{font-size:3.4rem}.tagline{font-size:1rem;letter-spacing:4px}.hero-wrapper.hero-settled{transform:scale3d(.55,.55,1) translate3d(0,0,0);padding-top:16px}.hero{padding:8px}.glass-card.lg{width:120px;height:120px}.glass-card.md{width:105px;height:105px}.glass-card.sm{width:90px;height:180px}.card-field{min-height:200px;padding:5px}.card-label{font-size:.5rem;top:6px;left:8px;padding:2px 8px}.cta-section{padding:24px 20px 16px}.glass-btn{height:60px;font-size:.65rem;padding:15px 18px!important;border-radius:30px}.popup-btn{padding:12px 28px;font-size:.9rem;min-width:140px}.popup-box{gap:10px}.story-heading{font-size:1.8rem}.section-body{font-size:.85rem}.products-row{gap:16px}.product-item{width:120px}.product-img{width:120px;height:120px}.product-emoji{width:120px;height:120px}.product-name{font-size:.85rem}.social-links{gap:16px}.social-link{font-size:.8rem}}
+@media(max-width:380px){.brand{font-size:2.8rem}.tagline{font-size:.85rem;letter-spacing:3px}.hero-wrapper.hero-settled{transform:scale3d(.5,.5,1) translate3d(0,0,0);padding-top:14px}.glass-card.lg{width:95px;height:95px}.glass-card.md{width:85px;height:85px}.glass-card.sm{width:75px;height:150px}.card-field{min-height:160px}.cta-section{padding:16px 16px 12px}.glass-btn{height:28px;font-size:.6rem;padding:4px 6px;border-radius:24px}.popup-btn{padding:10px 20px;font-size:.8rem;min-width:120px}}
+@media(max-width:768px){.glass-card{cursor:default}.glass-card:active{transform:scale(1.02)}}
 </style>
