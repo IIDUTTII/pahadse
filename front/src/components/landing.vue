@@ -3,9 +3,13 @@
     <svg style="display:none"><filter id="lg-dist" x="0%" y="0%" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency="0.008 0.008" numOctaves="2" seed="92" result="noise"/><feGaussianBlur in="noise" stdDeviation="2" result="blurred"/><feDisplacementMap in="SourceGraphic" in2="blurred" scale="50" xChannelSelector="R" yChannelSelector="G"/></filter></svg>
 
     <!-- LEAVES -->
-    <div class="bg-scattered">
-      <div v-for="(img, i) in currentScattered" :key="'leaf-' + i" class="leaf-item" :style="{ left: img.x + '%', top: img.y + '%', width: img.width + '%', transform: `rotate(${img.rotation}deg)` }"><img :src="img.src" alt="" draggable="false" /></div>
-    </div>
+    <!-- LEAVES (lazy load after animation) -->
+<!-- LEAVES -->
+<div class="bg-scattered" id="leaf-container">
+  <div v-for="(img, i) in currentScattered" :key="'leaf-' + i" class="leaf-item" :style="{ left: img.x + '%', top: img.y + '%', width: img.width + '%', transform: `rotate(${img.rotation}deg)` }">
+    <img :src="img.src" alt="" draggable="false" loading="lazy" />
+  </div>
+</div>
 
     <!-- HERO -->
     <div class="hero-wrapper" :class="{ 'hero-settled': settled }">
@@ -123,13 +127,13 @@ const scatteredByBreakpoint = {
   desktop: [
     { src: '/images/image1.avif', x: 45, y: 7, width: 16, rotation: -70 },
     { src: '/images/image2.avif', x: 21.5, y: 80.5, width: 10, rotation: 390 },
-    { src: '/images/image3.avif', x: 25.5, y: -1.5, width: 9.5, rotation: -245 },
+    { src: '/images/image3.avif', x: 33, y: 106, width: 6, rotation: -245 },
     { src: '/images/image4.avif', x: 73.43666702411234, y: 200.4175654853623, width: 26.5, rotation: 0 },
     { src: '/images/image7.avif', x: 69.49982255379554, y: -0.22958397534668679, width: 34, rotation: 0 },
     { src: '/images/image8.avif', x: 74, y: 102, width: 31, rotation: -5 },
     { src: '/images/image9.avif', x: 0.2440944881889768, y: 0.6070878274268605, width: 23.6, rotation: 0 },
     { src: '/images/image11.avif', x: -2.5, y: 106, width: 47, rotation: 190 },
-    { src: '/images/image12.avif', x: 5.629921259842518, y: 178.30508474576268, width: 16, rotation: 40 }
+    { src: '/images/image12.avif', x: 20.252918287937735, y: 8.534668721109398, width: 16.5, rotation: 30 }
   ],
   tablet: [
     { src: '/images/image1.avif', x: 42.29268292682925, y: 10.08782742681048, width: 26, rotation: -45 },
@@ -205,7 +209,23 @@ onMounted(async () => {
   window.addEventListener('resize', updatePositions)
   window.addEventListener('mousemove', onMouseMove); window.addEventListener('mouseup', onMouseUp)
   window.addEventListener('touchmove', onTouchMove, { passive: false }); window.addEventListener('touchend', onTouchEnd)
-  setTimeout(async () => { await nextTick(); requestAnimationFrame(() => { settled.value = true }); cards.forEach((_, i) => { setTimeout(() => { loadedCards.value[i] = true }, 4700 + i * 200) }) }, 4500)
+  
+  setTimeout(async () => {
+  await nextTick()
+  requestAnimationFrame(() => {
+    settled.value = true
+    // Add class to trigger leaf fade-in
+    const leafContainer = document.querySelector('.bg-scattered')
+    if (leafContainer) {
+      leafContainer.classList.add('loaded')
+    }
+  })
+  cards.forEach((_, i) => {
+    setTimeout(() => {
+      loadedCards.value[i] = true
+    }, 4700 + i * 200)
+  })
+}, 4500)
 })
 onUnmounted(() => { window.removeEventListener('resize', updatePositions); window.removeEventListener('mousemove', onMouseMove); window.removeEventListener('mouseup', onMouseUp); window.removeEventListener('touchmove', onTouchMove); window.removeEventListener('touchend', onTouchEnd) })
 
@@ -257,9 +277,33 @@ onUnmounted(() => { window.removeEventListener('resize', updatePositions); windo
 @keyframes revealBg{to{opacity:1}}
 
 /* ─── LEAVES ─── */
-.bg-scattered{position:absolute;top:0;left:0;width:100%;height:100vh;z-index:1;pointer-events:none;overflow:visible}
-.leaf-item{position:absolute;line-height:0}
-.leaf-item img{width:100%;display:block;pointer-events:none;user-select:none;-webkit-user-drag:none}
+/* ─── LEAVES ─── */
+.bg-scattered {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100vh;
+  z-index: 1;
+  pointer-events: none;
+  overflow: visible;
+  opacity: 0;
+  transition: opacity 0.8s ease;
+}
+.bg-scattered.loaded {
+  opacity: 1;
+}
+.leaf-item {
+  position: absolute;
+  line-height: 0;
+}
+.leaf-item img {
+  width: 100%;
+  display: block;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
 
 /* ─── HERO ─── */
 .hero-wrapper{position:relative;z-index:2;display:flex;align-items:center;justify-content:center;height:100vh;max-height:100vh;padding:20px;will-change:transform;transition:transform 1.1s cubic-bezier(.25,1,.35,1);transform:translate3d(0,0,0)}
@@ -364,10 +408,11 @@ onUnmounted(() => { window.removeEventListener('resize', updatePositions); windo
 .popup-btn.orange{background:rgba(255,152,0,.35);border-color:rgba(255,152,0,.25)}
 .popup-btn.orange:hover{background:rgba(255,152,0,.6);border-color:rgba(255,152,0,.4);box-shadow:0 8px 40px rgba(255,152,0,.3)}
 
+
 /* ─── RESPONSIVE ─── */
 @media(max-width:1024px){.glass-card.lg{width:220px;height:220px}.glass-card.md{width:190px;height:190px}.glass-card.sm{width:160px;height:320px}}
 @media(max-width:768px){.brand{font-size:4.2rem}.tagline{font-size:1.1rem;letter-spacing:5px}.hero-wrapper.hero-settled{transform:scale3d(.65,.65,1) translate3d(0,0,0);padding-top:18px}.glass-card.lg{width:160px;height:160px}.glass-card.md{width:135px;height:135px}.glass-card.sm{width:120px;height:240px}.card-field{min-height:280px;padding:10px}.cta-section{padding:30px 20px 20px}.glass-btn{height:36px;font-size:.7rem;padding:6px 10px}.popup-btn{padding:14px 36px;font-size:1rem;min-width:160px}.popup-box{gap:12px}.story-heading{font-size:2.2rem}.section-heading{font-size:1.6rem}.products-row{gap:24px}.product-item{width:140px}.product-img{width:140px;height:140px}.product-emoji{width:140px;height:140px}}
-@media(max-width:480px){.brand{font-size:3.4rem}.tagline{font-size:1rem;letter-spacing:4px}.hero-wrapper.hero-settled{transform:scale3d(.55,.55,1) translate3d(0,0,0);padding-top:16px}.hero{padding:8px}.glass-card.lg{width:120px;height:120px}.glass-card.md{width:105px;height:105px}.glass-card.sm{width:90px;height:180px}.card-field{min-height:200px;padding:5px}.card-label{font-size:.5rem;top:6px;left:8px;padding:2px 8px}.cta-section{padding:24px 20px 16px}.glass-btn{height:60px;font-size:.65rem;padding:15px 18px!important;border-radius:30px}.popup-btn{padding:12px 28px;font-size:.9rem;min-width:140px}.popup-box{gap:10px}.story-heading{font-size:1.8rem}.section-body{font-size:.85rem}.products-row{gap:16px}.product-item{width:120px}.product-img{width:120px;height:120px}.product-emoji{width:120px;height:120px}.product-name{font-size:.85rem}.social-links{gap:16px}.social-link{font-size:.8rem}}
-@media(max-width:380px){.brand{font-size:2.8rem}.tagline{font-size:.85rem;letter-spacing:3px}.hero-wrapper.hero-settled{transform:scale3d(.5,.5,1) translate3d(0,0,0);padding-top:14px}.glass-card.lg{width:95px;height:95px}.glass-card.md{width:85px;height:85px}.glass-card.sm{width:75px;height:150px}.card-field{min-height:160px}.cta-section{padding:16px 16px 12px}.glass-btn{height:28px;font-size:.6rem;padding:4px 6px;border-radius:24px}.popup-btn{padding:10px 20px;font-size:.8rem;min-width:120px}}
+@media(max-width:480px){.brand{font-size:3.4rem}.tagline{font-size:1rem;letter-spacing:4px}.hero-wrapper.hero-settled{transform:scale3d(.55,.55,1) translate3d(0,0,0);padding-top:16px}.hero{padding:8px}.glass-card.lg{width:120px;height:120px}.glass-card.md{width:105px;height:105px}.glass-card.sm{width:90px;height:180px}.card-field{min-height:200px;padding:5px}.card-label{font-size:.5rem;top:6px;left:8px;padding:2px 8px}.cta-section{padding:24px 20px 16px}.glass-btn{height:60px;font-size:.65rem;padding:15px 18px!important;border-radius:30px}.popup-btn{padding:12px 28px;font-size:.9rem;min-width:140px}.popup-box{gap:10px}.story-heading{font-size:1.8rem}.section-body{font-size:.85rem}.products-row{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}.product-item{width:100%;max-width:140px;margin:0 auto}.product-img{width:120px;height:120px;margin:0 auto 10px}.product-emoji{width:120px;height:120px;margin:0 auto 10px}.product-name{font-size:.85rem;text-align:center}.product-price{text-align:center;display:block}.social-links{gap:16px}.social-link{font-size:.8rem}}
+@media(max-width:380px){.brand{font-size:2.8rem}.tagline{font-size:.85rem;letter-spacing:3px}.hero-wrapper.hero-settled{transform:scale3d(.5,.5,1) translate3d(0,0,0);padding-top:14px}.glass-card.lg{width:95px;height:95px}.glass-card.md{width:85px;height:85px}.glass-card.sm{width:75px;height:150px}.card-field{min-height:160px}.cta-section{padding:16px 16px 12px}.glass-btn{height:28px;font-size:.6rem;padding:4px 6px;border-radius:24px}.popup-btn{padding:10px 20px;font-size:.8rem;min-width:120px}.products-row{grid-template-columns:repeat(2,1fr);gap:8px}.product-item{max-width:110px}.product-img{width:100px;height:100px}.product-emoji{width:100px;height:100px}}
 @media(max-width:768px){.glass-card{cursor:default}.glass-card:active{transform:scale(1.02)}}
 </style>
