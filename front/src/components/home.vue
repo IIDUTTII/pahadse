@@ -41,11 +41,12 @@ const primaryImage = (p) => p.imageUrls?.find(u => u?.trim()) ?? null
 
 <template>
   <div class="page">
+   <div class="page-inner">
     <div class="hero">
       <div class="hero-badge">🌿 100% Natural | Handmade in Himalayas</div>
       <h1 class="hero-title">Pure Mountain Goodness,<br>Delivered to Your Door</h1>
       <p style="color: #fca5a5; font-weight: 500; font-size: 13px; margin-bottom: 12px;">⚠ Testing phase — demo products only</p>
-      <p class="hero-sub">No preservatives · Ethically sourced · Plastic‑free packaging</p>
+      <p class="hero-sub" style="color: #22C55E;">No preservatives · Ethically sourced · Plastic‑free packaging</p>
     </div>
 
     <div class="section-head">
@@ -88,6 +89,7 @@ const primaryImage = (p) => p.imageUrls?.find(u => u?.trim()) ?? null
         <button class="load-more-btn" @click="displayLimit += 8">↓ Discover More Products</button>
       </div>
     </div>
+   </div>
   </div>
 </template>
 
@@ -96,13 +98,19 @@ const primaryImage = (p) => p.imageUrls?.find(u => u?.trim()) ?? null
 /* ─── PAGE ─── */
 .page {
   background: #fafaf8;
-  padding: 100px 20px 80px;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   min-height: 100vh;
-  max-width: 1200px;
-  margin: 0 auto;
+  width: 100%;
   color: #1a1a1a;
   line-height: 1.6;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  display: flex;
+  flex-direction: column;
+}
+.page-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 100px 20px 80px;
+  flex: 1;
 }
 
 /* ─── HERO ─── */
@@ -190,8 +198,8 @@ const primaryImage = (p) => p.imageUrls?.find(u => u?.trim()) ?? null
 }
 .pill:hover,
 .pill.active {
-  background: #22C55E;
-  border-color: #22C55E;
+  background: #0F2A1F;
+  border-color: #0F2A1F;
   color: #fff;
 }
 

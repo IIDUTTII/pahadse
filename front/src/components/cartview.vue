@@ -1,9 +1,9 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { db, auth } from '../firebase.js'
 import { onAuthStateChanged } from 'firebase/auth'
 import { doc, onSnapshot } from 'firebase/firestore'
-import { saveCartItems, fetchCoupons, fetchShippingConfig } from './db.js'
+import { saveCartItems, fetchCoupons, fetchShippingConfig, fetchCartItemsStock } from './db.js'
 
 defineOptions({ name: 'CartView' })
 
@@ -11,6 +11,20 @@ const cartItems = ref([]), loading = ref(true), currentUser = ref(null)
 const promoCode = ref(''), promoApplied = ref(false), promoError = ref('')
 const activeCoupons = ref([]), appliedCoupon = ref(null)
 const shippingConfig = ref({ fee: 60, freeThreshold: 499, isFreeShippingActive: true })
+const stockMap = ref(new Map())
+const stockLoading = ref(false)
+
+async function refreshStock() {
+  if (!cartItems.value.length) { stockMap.value = new Map(); return }
+  stockLoading.value = true
+  try {
+    stockMap.value = await fetchCartItemsStock(cartItems.value)
+  } catch (e) { console.warn('Stock refresh failed:', e) }
+  finally { stockLoading.value = false }
+}
+
+// Watch cart items changes to refresh stock
+watch(cartItems, () => { refreshStock() }, { deep: true })
 
 onMounted(() => {
   onAuthStateChanged(auth, async (user) => {
@@ -28,6 +42,27 @@ onMounted(() => {
     } else { loading.value = false }
   })
 })
+
+function getItemStockInfo(item) {
+  const key = `${item.productId}::${item.variant || item.weight || 'Standard'}`
+  return stockMap.value.get(key) || null
+}
+
+function isItemOutOfStock(item) {
+  const info = getItemStockInfo(item)
+  if (!info) return false
+  return info.stock === 0 || !info.isActive || !info.variantActive
+}
+
+function getStockLabel(item) {
+  const info = getItemStockInfo(item)
+  if (!info) return ''
+  if (!info.isActive) return 'Unavailable'
+  if (!info.variantActive) return 'Variant Unavailable'
+  if (info.stock === 0) return 'Out of Stock'
+  if (info.stock < item.quantity) return `Only ${info.stock} left`
+  return ''
+}
 
 const subtotal = computed(() => cartItems.value.reduce((s, i) => s + i.price * i.quantity, 0))
 const totalItemCount = computed(() => cartItems.value.reduce((s, i) => s + i.quantity, 0))
@@ -120,7 +155,7 @@ const clearVoucher = () => {
 
           <!-- Single box for all items -->
           <div class="cart-items-wrapper">
-            <div v-for="(item, idx) in cartItems" :key="idx" class="cart-item-row">
+            <div v-for="(item, idx) in cartItems" :key="idx" :class="['cart-item-row', { 'out-of-stock-row': isItemOutOfStock(item) }]">
               
               <!-- Image (no emoji fallback) -->
               <router-link :to="`/product/${item.slug || 'product'}--${item.productId}`" class="item-img-link">
@@ -134,7 +169,10 @@ const clearVoucher = () => {
                     <router-link :to="`/product/${item.slug || 'product'}--${item.productId}`" class="item-title-link">
                       {{ item.name }}
                     </router-link>
-                    <span class="item-variant-tag">{{ item.variant || item.weight || 'Standard' }}</span>
+                    <span class="item-variant-tag">{{ item.variant || item.variantId || item.weight || 'Standard' }}</span>
+                    <span v-if="getStockLabel(item)" :class="['stock-badge', { 'oos': isItemOutOfStock(item), 'low': !isItemOutOfStock(item) }]">
+                      {{ getStockLabel(item) }}
+                    </span>
                   </div>
                   <div class="item-price-display">
                     <strong>₹{{ item.price * item.quantity }}</strong>
@@ -256,6 +294,15 @@ const clearVoucher = () => {
 .qty-val{width:24px;text-align:center;font-size:0.85rem;font-weight:600;color:#1a1a2e}
 .delete-btn{background:transparent;border:none;color:#9a8a7a;cursor:pointer;padding:4px;border-radius:6px;font-size:0.9rem;transition:0.2s}
 .delete-btn:hover{background:#fef2f2;color:#dc2626}
+
+/* ─── Out of Stock Indicators ─── */
+.stock-badge{font-size:0.65rem;font-weight:700;padding:2px 8px;border-radius:100px;display:inline-block;margin-left:6px;text-transform:uppercase;letter-spacing:0.3px}
+.stock-badge.oos{background:#fef2f2;color:#dc2626;border:1px solid #fecaca}
+.stock-badge.low{background:#fef3c7;color:#92400e;border:1px solid #fde68a}
+.out-of-stock-row{opacity:0.75;background:#fefbfb;border-left:3px solid #dc2626}
+.out-of-stock-row .item-title-link{color:#9a8a7a}
+.out-of-stock-row .item-price-display strong{color:#9a8a7a;text-decoration:line-through}
+
 .clear-basket-link{background:transparent;border:none;color:#6b5f55;font-size:0.8rem;font-weight:500;cursor:pointer;padding:8px 16px;border-radius:6px;transition:0.2s;display:block;text-align:left;width:100%}
 .clear-basket-link:hover{background:#ede8e2;color:#1a1a2e}
 

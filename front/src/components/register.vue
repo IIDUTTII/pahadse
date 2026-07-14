@@ -94,7 +94,7 @@ const handleEmailAuth = async () => {
         <div class="overlay-shader"></div>
         <div class="brand-narrative-content">
           <span class="narrative-icon">🏔️</span>
-          <h3>PahadSe</h3>
+          <h3>PahadS</h3>
           <p class="tagline">Pure. Pristine. Straight from the Peaks.</p>
           <span class="image-location-tag">📍 Mandi, Himachal Pradesh</span>
         </div>

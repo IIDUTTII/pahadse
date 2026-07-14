@@ -18,28 +18,28 @@ import Return  from '../components/return-refund.vue'
 import Contact from '../components/contact.vue'
 import About from '../components/about.vue'
 import orders from '../components/orders.vue'
-//import Layout from '../components/layout.vue'
+import Layout from '../components/layout.vue'
 
 
 const routes = [
-  { path: '/',                       component:   Landing,name: "Landing",meta: { title: 'PahadSe' }          },
-  { path: '/products',              component:   Home,name: "Home",meta: { title: 'Home | PahadSe' }          },
-  { path: '/login',                  component: Login,name: "Login",meta: { title: 'Login | PahadSe' }         },
-  { path: '/register',               component: Register,name: "Register",meta: { title: 'Register | PahadSe' }      },
-  { path: '/user',                   component: User,name: "User",meta: { title: 'User | PahadSe' }          },
-  { path: '/privacy',               component: Privacy,name: "Privacy",meta: { title: 'Privacy | PahadSe' }       },
-  { path: '/cart',                   component: Cart,name: "Cart",meta: { title: 'Cart | PahadSe' }          },
-  { path: '/product/:id',            component: ProductDetail,name: "ProductDetail",meta: { title: 'Product | PahadSe' } },  // 👈 new
-  { path: '/admin', component: Admin, meta: { title: 'Admin | PahadSe', requiresAdmin: true } },
+  { path: '/',                       component:   Landing,name: "Landing",meta: { title: 'PahadS' }          },
+  { path: '/products',              component:   Home,name: "Home",meta: { title: 'Home | PahadS' }          },
+  { path: '/login',                  component: Login,name: "Login",meta: { title: 'Login | PahadS' }         },
+  { path: '/register',               component: Register,name: "Register",meta: { title: 'Register | PahadS' }      },
+  { path: '/user',                   component: User,name: "User",meta: { title: 'User | PahadS' }          },
+  { path: '/privacy',               component: Privacy,name: "Privacy",meta: { title: 'Privacy | PahadS' }       },
+  { path: '/cart',                   component: Cart,name: "Cart",meta: { title: 'Cart | PahadS' }          },
+  { path: '/product/:id',            component: ProductDetail,name: "ProductDetail",meta: { title: 'Product | PahadS' } },  // 👈 new
+  { path: '/admin', component: Admin, meta: { title: 'Admin | PahadS', requiresAdmin: true } },
   { path: '/:pathMatch(.*)*', name: 'NotFound', component: NotFoundView },
-  { path: '/admin/product/:id', component: ProductForm, meta: { title: 'Edit Product | PahadSe', requiresAdmin: true } },
-  { path: '/checkout', component: checkout,meta: { title: 'Checkout | PahadSe' } },
-  { path: '/terms', component: Terms,meta: { title: 'Terms | PahadSe' } },
-  { path: '/return', component: Return,meta: { title: 'Return & Refund | PahadSe' } },
-  { path: '/contact', component: Contact,meta: { title: 'Contact | PahadSe' } },
-  { path: '/about', component: About,meta: { title: 'About | PahadSe' } },
-  { path: '/orders', component: orders,meta: { title: 'Orders | PahadSe' } },
-  //{ path: '/layout', component: Layout,name: "Layout",meta: { title: 'Layout | PahadSe' } }
+  { path: '/admin/product/:id', component: ProductForm, meta: { title: 'Edit Product | PahadS', requiresAdmin: true } },
+  { path: '/checkout', component: checkout,meta: { title: 'Checkout | PahadS' } },
+  { path: '/terms', component: Terms,meta: { title: 'Terms | PahadS' } },
+  { path: '/return', component: Return,meta: { title: 'Return & Refund | PahadS' } },
+  { path: '/contact', component: Contact,meta: { title: 'Contact | PahadS' } },
+  { path: '/about', component: About,meta: { title: 'About | PahadS' } },
+  { path: '/orders', component: orders,meta: { title: 'Orders | PahadS' } },
+  { path: '/layout', component: Layout,name: "Layout",meta: { title: 'Layout | PahadS' } }
 ]
 
 const router = createRouter({

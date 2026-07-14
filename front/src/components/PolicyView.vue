@@ -16,10 +16,10 @@ defineOptions({
 
       <div class="document-body">
         <p class="intro-text">
-          Welcome to PahadSe. We value your privacy and are committed to protecting your personal information. This Privacy Policy explains how we collect, use, store, and protect your information when you use our website and services.
+          Welcome to PahadS. We value your privacy and are committed to protecting your personal information. This Privacy Policy explains how we collect, use, store, and protect your information when you use our website and services.
         </p>
         <p class="intro-text">
-          PahadSe is owned and operated by <strong>Bhawani Dutt</strong>, located in <strong>Seraj Valley, Mandi, Himachal Pradesh, India</strong>.
+          PahadS is owned and operated by <strong>Bhawani Dutt</strong>, located in <strong>Seraj Valley, Mandi, Himachal Pradesh, India</strong>.
         </p>
 
         <div class="section-block">
@@ -71,14 +71,14 @@ defineOptions({
           <h2>5. Payment Processing</h2>
           <ul class="legal-list">
             <li>Payments are processed through trusted third-party providers such as Razorpay.</li>
-            <li>PahadSe does <strong>not</strong> store credit/debit card numbers, UPI credentials, banking passwords, or CVV information.</li>
+            <li>PahadS does <strong>not</strong> store credit/debit card numbers, UPI credentials, banking passwords, or CVV information.</li>
           </ul>
         </div>
 
         <div class="section-block">
           <h2>6. Marketing Communications</h2>
           <ul class="legal-list">
-            <li>By creating an account, you may receive promotional communications from PahadSe.</li>
+            <li>By creating an account, you may receive promotional communications from PahadS.</li>
             <li>You may opt out at any time through account settings or by contacting support.</li>
           </ul>
         </div>
@@ -116,14 +116,14 @@ defineOptions({
         <div class="section-block">
           <h2>11. Changes to This Policy</h2>
           <ul class="legal-list">
-            <li>PahadSe may update this Privacy Policy from time to time. Updated versions will be published on this page with a revised date.</li>
+            <li>PahadS may update this Privacy Policy from time to time. Updated versions will be published on this page with a revised date.</li>
           </ul>
         </div>
 
         <div class="section-block">
           <h2>12. Contact Information</h2>
           <ul class="legal-list">
-            <li><strong>PahadSe</strong></li>
+            <li><strong>PahadS</strong></li>
             <li>Address: Seraj Valley, Mandi, Himachal Pradesh, India</li>
             <li>Email: care@pahadse.com</li>
             <li>Phone: +91 XXXXX XXXXX</li>

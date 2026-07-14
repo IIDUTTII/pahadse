@@ -44,14 +44,14 @@ const hideNavFooter = computed(() => {
 }
 
 body {
-  background: #FFFFFF;
+  background: #fafaf8;
   min-height: 100vh;
   overflow-x: hidden;
   width: 100%;
   font-family: 'DM Sans', sans-serif;
   font-size: 1rem !important;
-  margin: 0;  /* ← ADD THIS */
-  padding: 0; /* ← ADD THIS */
+  margin: 0;
+  padding: 0;
 }
 
 #app {

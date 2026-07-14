@@ -7,8 +7,8 @@ defineOptions({ name: 'Footer' })
   <footer class="footer">
     <div class="footer-inner">
       <div class="footer-brand">
-        <img src="../assets/logo.png" alt="PahadSe" class="foot-logo" />
-        <span class="foot-name">PahadSe</span>
+        <img src="../assets/logo.png" alt="PahadS" class="foot-logo" />
+        <span class="foot-name">PahadS</span>
         <p class="foot-tagline">Pure Himalayan goodness,<br>no preservatives, handmade with love.</p>
       </div>
 
@@ -33,14 +33,14 @@ defineOptions({ name: 'Footer' })
       <div class="footer-col">
         <div class="col-title">Account</div>
         <router-link to="/login">Login</router-link>
-        <router-link to="/register">Register</router-link>
         <router-link to="/user">My Profile</router-link>
         <router-link to="/orders">My Orders</router-link>
+        <router-link to="/cart">My Cart</router-link>
       </div>
     </div>
 
     <div class="footer-bottom">
-      <span>© {{ year }} PahadSe. All rights reserved.</span>
+      <span>© {{ year }} PahadS. All rights reserved.</span>
       <span class="made-with">🏔️ Made with care in Himachal Pradesh</span>
     </div>
   </footer>
@@ -50,9 +50,8 @@ defineOptions({ name: 'Footer' })
 /* 🌿 PREMIUM GREEN/DARK FOOTER */
 .footer {
   background: #0F2A1F;
-  color: #D9E0D4;
+  color: #FFFFFF;
   font-family: 'DM Sans', system-ui, sans-serif;
-  margin-top: 60px;
   padding-bottom: 20px;
 }
 
@@ -78,13 +77,14 @@ defineOptions({ name: 'Footer' })
 }
 .foot-name {
   font-family: 'Playfair Display', serif;
-  font-size: 20px;
+  font-size: 22px;
   font-weight: 700;
   color: #C9A96E;
 }
 .foot-tagline {
   font-size: 13px;
-  color: rgba(217, 224, 212, 0.55);
+  color: rgba(255, 255, 255, 0.85);
+  font-weight: 400;
   line-height: 1.5;
   margin: 0;
 }
@@ -95,7 +95,7 @@ defineOptions({ name: 'Footer' })
   gap: 10px;
 }
 .col-title {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 1.2px;
   text-transform: uppercase;
@@ -104,8 +104,9 @@ defineOptions({ name: 'Footer' })
 }
 .footer-col a {
   text-decoration: none;
-  color: rgba(217, 224, 212, 0.55);
+  color: #FFFFFF;
   font-size: 13px;
+  font-weight: 500;
   transition: color 0.2s;
 }
 .footer-col a:hover {
@@ -121,12 +122,14 @@ defineOptions({ name: 'Footer' })
   align-items: center;
   justify-content: space-between;
   font-size: 12px;
-  color: rgba(217, 224, 212, 0.4);
+  font-weight: 500;
+  color: #FFFFFF;
   flex-wrap: wrap;
   gap: 8px;
 }
 .made-with {
-  color: rgba(217, 224, 212, 0.42);
+  color: #FFFFFF;
+  font-weight: 500;
   font-style: italic;
 }
 

@@ -19,16 +19,16 @@ defineOptions({
         <div class="section-block">
           <h2>1. Acceptance of Terms</h2>
           <ul class="legal-list">
-            <li>By accessing or using the PahadSe website, you agree to comply with these Terms & Conditions.</li>
+            <li>By accessing or using the PahadS website, you agree to comply with these Terms & Conditions.</li>
             <li>If you do not agree with these terms, please do not use our website.</li>
           </ul>
         </div>
 
-        <!-- 2. About PahadSe -->
+        <!-- 2. About PahadS -->
         <div class="section-block">
-          <h2>2. About PahadSe</h2>
+          <h2>2. About PahadS</h2>
           <ul class="legal-list">
-            <li>PahadSe is a Himalayan food and wellness products brand owned by <strong>Bhawani Dutt</strong> and operated from <strong>Seraj Valley, Mandi, Himachal Pradesh, India</strong>.</li>
+            <li>PahadS is a Himalayan food and wellness products brand owned by <strong>Bhawani Dutt</strong> and operated from <strong>Seraj Valley, Mandi, Himachal Pradesh, India</strong>.</li>
           </ul>
         </div>
 
@@ -48,7 +48,7 @@ defineOptions({
           <h2>4. Pricing</h2>
           <ul class="legal-list">
             <li>All prices displayed on the website are subject to change without prior notice.</li>
-            <li>PahadSe reserves the right to correct pricing errors, modify product pricing, or cancel orders affected by pricing inaccuracies.</li>
+            <li>PahadS reserves the right to correct pricing errors, modify product pricing, or cancel orders affected by pricing inaccuracies.</li>
           </ul>
         </div>
 
@@ -57,7 +57,7 @@ defineOptions({
           <h2>5. Order Acceptance</h2>
           <ul class="legal-list">
             <li>Submission of an order does not guarantee acceptance.</li>
-            <li>PahadSe reserves the right to refuse any order, cancel any order, or limit quantities purchased.</li>
+            <li>PahadS reserves the right to refuse any order, cancel any order, or limit quantities purchased.</li>
             <li>Orders may be cancelled due to product unavailability, pricing errors, suspected fraud, delivery restrictions, or operational limitations.</li>
           </ul>
         </div>
@@ -75,7 +75,7 @@ defineOptions({
         <div class="section-block">
           <h2>7. Intellectual Property</h2>
           <ul class="legal-list">
-            <li>All content on the PahadSe website, including logos, product images, text, graphics, and branding, is the property of PahadSe unless otherwise stated.</li>
+            <li>All content on the PahadS website, including logos, product images, text, graphics, and branding, is the property of PahadS unless otherwise stated.</li>
             <li>Unauthorized use is prohibited.</li>
           </ul>
         </div>
@@ -94,7 +94,7 @@ defineOptions({
         <div class="section-block">
           <h2>9. Limitation of Liability</h2>
           <ul class="legal-list">
-            <li>PahadSe shall not be liable for indirect damages, consequential damages, delivery delays caused by weather or transportation issues, or individual allergic reactions or sensitivities.</li>
+            <li>PahadS shall not be liable for indirect damages, consequential damages, delivery delays caused by weather or transportation issues, or individual allergic reactions or sensitivities.</li>
             <li>Customers are responsible for reviewing ingredient information before consumption.</li>
           </ul>
         </div>
@@ -121,7 +121,7 @@ defineOptions({
         <div class="section-block">
           <h2>12. Contact Information</h2>
           <ul class="legal-list">
-            <li><strong>PahadSe</strong></li>
+            <li><strong>PahadS</strong></li>
             <li>Address: Seraj Valley, Mandi, Himachal Pradesh, India</li>
             <li>Email: care@pahadse.com</li>
             <li>Phone: +91 XXXXX XXXXX</li>

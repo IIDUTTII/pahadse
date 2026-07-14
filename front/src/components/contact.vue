@@ -73,7 +73,7 @@ const handleContactSubmit = async () => {
           <div class="mountain-photo">
             <img 
               src="https://firebasestorage.googleapis.com/v0/b/pahadse-13309.firebasestorage.app/o/contact%2Fcontact1.jpg?alt=media&token=4bd4d9a2-24be-4067-88ac-2aee1f6dba9a" 
-              alt="Seraj Valley, Himachal Pradesh - Where PahadSe sources its pure mountain products"
+              alt="Seraj Valley, Himachal Pradesh - Where PahadS sources its pure mountain products"
               class="seraj-valley-img"
             >
             <div class="photo-caption">
@@ -105,7 +105,7 @@ const handleContactSubmit = async () => {
                 <span class="method-icon">🏔️</span>
                 <div>
                   <strong>Mountain Base</strong>
-                  <p>PahadSe Distribution Hub,<br>Mandi, Himachal Pradesh - 175001</p>
+                  <p>PahadS Distribution Hub,<br>Mandi, Himachal Pradesh - 175001</p>
                 </div>
               </div>
             </div>
@@ -172,7 +172,7 @@ const handleContactSubmit = async () => {
 <style scoped>
 /* Base Page Styling */
 .contact-page-wrapper {
-  background-color: #FAF6F0; /* PahadSe Brand Background */
+  background-color: #FAF6F0; /* PahadS Brand Background */
   min-height: 100vh;
   padding: calc(90px + 40px) 4% 60px;
   box-sizing: border-box;

@@ -42,8 +42,7 @@ const renderChart = (data) => {
 const jumpToOrderFilter = (filterKey) => {
   sessionStorage.setItem('adminOrderFilter', filterKey)
   // Triggers an event that OrdersTab is listening for
-  window.dispatchEvent(new Event('apply-order-filter'))
-  alert('Filter prepared! Please click on the "Orders" tab to view them.')
+  window.dispatchEvent(new CustomEvent('apply-order-filter', { detail: { filter: filterKey } }))
 }
 
 onMounted(fetchAnalytics)
@@ -67,8 +66,8 @@ onMounted(fetchAnalytics)
         <div class="metric-card alert" @click="jumpToOrderFilter('replacement_requested')">
           <div class="m-icon">🔄</div><div class="m-data"><h3>Replace Req.</h3><p>{{ statusCounts.replacement_requested }}</p></div>
         </div>
-        <div class="metric-card warning" @click="jumpToOrderFilter('cancelled_refund_pending')">
-          <div class="m-icon">💸</div><div class="m-data"><h3>Refunds Pending</h3><p>{{ (statusCounts.cancelled_refund_pending || 0) + (statusCounts.returned_refund_pending || 0) }}</p></div>
+        <div class="metric-card warning" @click="jumpToOrderFilter('refund_requested')">
+          <div class="m-icon">💸</div><div class="m-data"><h3>Refund Requests</h3><p>{{ statusCounts.refund_requested || 0 }}</p></div>
         </div>
         <div class="metric-card info" @click="jumpToOrderFilter('pending')">
           <div class="m-icon">⏳</div><div class="m-data"><h3>New Pending</h3><p>{{ statusCounts.pending }}</p></div>

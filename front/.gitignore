@@ -28,3 +28,16 @@ dist-ssr
 .wrangler.toml
 .dev.vars
 layout.vue
+
+# Test files
+test-sa*.cjs
+test-sa*.js
+
+# Environment variables
+.dev.vars
+.env
+.env.local
+.env.*.local
+
+# Node modules
+node_modules/

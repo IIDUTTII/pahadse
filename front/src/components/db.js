@@ -459,9 +459,63 @@ export async function deleteProduct(productId) {
 // ─────────────────────────────────────────────────────────────────────────────
 // 🛒 CART & CHECKOUT SYSTEMS
 // ─────────────────────────────────────────────────────────────────────────────
-// ─────────────────────────────────────────────────────────────────────────────
-// 🛒 CART & CHECKOUT SYSTEMS
-// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Batch-fetch live stock for cart items.
+ * Returns a Map keyed by `${productId}::${variantLabel}` → { stock, price, isActive, variantActive }
+ * Used by cartview.vue and checkout.vue to show out-of-stock warnings.
+ */
+export async function fetchCartItemsStock(cartItems) {
+  const stockMap = new Map()
+  if (!cartItems || cartItems.length === 0) return stockMap
+
+  const uniqueProductIds = [...new Set(cartItems.map(i => i.productId))]
+  
+  try {
+    const results = await Promise.allSettled(
+      uniqueProductIds.map(id => getDoc(doc(db, 'products', id)))
+    )
+
+    const productDataMap = new Map()
+    results.forEach((r, idx) => {
+      if (r.status === 'fulfilled' && r.value.exists()) {
+        productDataMap.set(uniqueProductIds[idx], r.value.data())
+      }
+    })
+
+    for (const item of cartItems) {
+      const product = productDataMap.get(item.productId)
+      if (!product) {
+        stockMap.set(`${item.productId}::${item.variant || item.weight || 'Standard'}`, {
+          stock: 0, price: item.price, isActive: false, variantActive: false
+        })
+        continue
+      }
+
+      const variantLabel = item.variant || item.weight || 'Standard'
+      const variants = product.variants || []
+      const variant = variants.find(v => v.label === variantLabel)
+
+      if (!variant) {
+        stockMap.set(`${item.productId}::${variantLabel}`, {
+          stock: 0, price: item.price, isActive: product.isActive !== false, variantActive: false
+        })
+        continue
+      }
+
+      stockMap.set(`${item.productId}::${variantLabel}`, {
+        stock: Number(variant.stock) || 0,
+        price: Number(variant.price) || item.price,
+        isActive: product.isActive !== false,
+        variantActive: variant.active !== false,
+      })
+    }
+  } catch (e) {
+    console.warn('fetchCartItemsStock failed:', e.message)
+  }
+
+  return stockMap
+}
 
 export async function fetchCart() {
   const user = auth.currentUser
@@ -498,8 +552,9 @@ export async function addProductToCart(product, finalPrice, selectedVariant = nu
   const primaryImg = (product.imageUrls && product.imageUrls.length > 0) ? product.imageUrls[0] : null
   
   const variantLabel = selectedVariant ? selectedVariant.label : (product.weight || 'Standard')
+  const variantId = selectedVariant?.variantId || variantLabel
   // Creates a strictly unique ID for the cart row
-  const cartItemId = `${product.id}_${variantLabel.replace(/[^a-zA-Z0-9]/g, '')}`
+  const cartItemId = `${product.id}_${variantId.replace(/[^a-zA-Z0-9]/g, '')}`
 
   const cartRef = doc(db, 'carts', user.uid)
   const snap = await getDoc(cartRef)
@@ -523,6 +578,7 @@ export async function addProductToCart(product, finalPrice, selectedVariant = nu
        productId : product.id,
        name      : product.name,
        variant   : variantLabel,
+       variantId : variantId,
        price     : Number(finalPrice),
        emoji     : product.emoji || '📦',
        imageUrl  : primaryImg,
@@ -585,6 +641,8 @@ export const addNewUserAddress = async (addressData) => {
   const uniqueAddressPayload = {
     id: `addr_${Date.now()}`,
     ...addressData,
+    pincode: String(addressData.pincode ?? '').trim(),
+    phone: String(addressData.phone ?? '').trim(),
     isVerified: true
   }
 
@@ -620,7 +678,13 @@ export const modifyUserAddressInDb = async (addressId, updatedFields) => {
       const addresses = snap.data().addresses || []
       const idx = addresses.findIndex(a => a.id === addressId)
       if (idx !== -1) {
-        addresses[idx] = { ...addresses[idx], ...updatedFields }
+        // Normalize pincode & phone to strings to prevent type errors
+        const normalizedFields = {
+          ...updatedFields,
+          pincode: String(updatedFields.pincode ?? '').trim(),
+          phone: String(updatedFields.phone ?? '').trim(),
+        }
+        addresses[idx] = { ...addresses[idx], ...normalizedFields }
         await updateDoc(userRef, { addresses })
       }
     }
@@ -653,9 +717,9 @@ async function _resolveOrderContact(order = {}) {
 
 async function _queueOrderStatusNotification(orderId, orderData, status, extra = {}) {
   const templates = {
-    confirmed: `Hi ${orderData.customerName || 'Customer'}, your PahadSe order ${orderId.slice(0, 8)}… is confirmed and being prepared.`,
+    confirmed: `Hi ${orderData.customerName || 'Customer'}, your PahadS order ${orderId.slice(0, 8)}… is confirmed and being prepared.`,
     shipped: `Your order is on the way! Tracking ID: ${extra.trackingId || 'Check your orders page'}.`,
-    delivered: `Your PahadSe order has been delivered. Thank you for shopping with us!`,
+    delivered: `Your PahadS order has been delivered. Thank you for shopping with us!`,
     rejected: `Your order was cancelled: ${extra.adminComment || 'Please contact support if you need help.'}`,
   }
   const message = templates[status]
@@ -676,6 +740,16 @@ async function _queueOrderStatusNotification(orderId, orderData, status, extra =
 
 export function subscribeToOrders(cb) {
   return onSnapshot(collection(db, 'orders'), cb)
+}
+
+// Subscribe to payments collection for admin dashboard
+export function subscribeToPayments(cb) {
+  return onSnapshot(collection(db, 'payments'), cb)
+}
+
+export async function fetchPayments() {
+  const snap = await getDocs(collection(db, 'payments'))
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }))
 }
 
 export function subscribeToOrdersPaginated(limitCount, cb) {
@@ -705,11 +779,11 @@ export async function updateOrderStatus(orderId, updates = {}) {
 }
 
 export async function confirmOrderInDb(orderId, options = {}) {
-  await updateOrderStatus(orderId, { shippingStatus: 'confirmed' })
+  await updateOrderStatus(orderId, { shippingStatus: 'confirmed', confirmedAt: serverTimestamp() })
 }
 
 export async function shipOrderInDb(orderId, trackingId, options = {}) {
-  await updateOrderStatus(orderId, { shippingStatus: 'shipped', trackingId: trackingId.trim() })
+  await updateOrderStatus(orderId, { shippingStatus: 'shipped', trackingId: trackingId.trim(), shippedAt: serverTimestamp() })
 }
 
 export async function markOrderDeliveredInDb(orderId, options = {}) {
@@ -721,11 +795,28 @@ export async function rejectOrderInDb(orderId, adminComment, options = {}) {
   const snap = await getDoc(ref)
   const order = snap.exists() ? snap.data() : null
   
-  // Strict Refund Logic: Agar online tha aur reject hua, toh refund pending mein dalo
-  if (order && order.paymentMethod === 'online') {
-    await updateOrderStatus(orderId, { shippingStatus: 'cancelled_refund_pending', adminComment: adminComment.trim() })
+  const reason = adminComment.trim()
+  // Strict Refund Logic: Agar online paid tha aur reject hua, toh refund pending mein dalo
+  if (order && order.paymentMethod === 'online' && order.paymentStatus === 'paid') {
+    await updateOrderStatus(orderId, {
+      shippingStatus: 'cancelled_refund_pending',
+      cancelReason: reason,
+      adminComment: reason,
+      refund_status: 'requested',
+      refund_reason: 'Order rejected by admin: ' + reason,
+      refund_requested_at: serverTimestamp(),
+      cancelledAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    })
   } else {
-    await updateOrderStatus(orderId, { shippingStatus: 'rejected', adminComment: adminComment.trim() })
+    // COD or unpaid: just cancel/reject
+    await updateOrderStatus(orderId, {
+      shippingStatus: 'cancelled',
+      cancelReason: reason,
+      adminComment: reason,
+      cancelledAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    })
   }
 }
 
@@ -762,8 +853,7 @@ export async function fetchOrderById(orderId) {
   return snap.exists() ? { id: snap.id, ...snap.data() } : null
 }
 
-
-export async function cancelCustomerOrder(orderId) {
+export async function cancelCustomerOrder(orderId, cancelReason = '') {
   const user = auth.currentUser
   if (!user) throw new Error('NOT_LOGGED_IN')
   if (!orderId) throw new Error('ORDER_ID_REQUIRED')
@@ -771,18 +861,31 @@ export async function cancelCustomerOrder(orderId) {
   const ref = doc(db, 'orders', orderId)
   const snap = await getDoc(ref)
   if (!snap.exists()) throw new Error('ORDER_NOT_FOUND')
+  
   const order = snap.data()
   if (order.userId !== user.uid) throw new Error('ORDER_ACCESS_DENIED')
-  if ((order.shippingStatus || 'pending') !== 'pending') {
-    throw new Error('ONLY_PENDING_ORDERS_CAN_BE_CANCELLED')
-  }
+  if ((order.shippingStatus || 'pending') !== 'pending') throw new Error('ONLY_PENDING_ORDERS_CAN_BE_CANCELLED')
 
+  // COD orders: just cancel, no refund needed
+  // Online paid orders: cancel + mark refund_pending for admin to process
+  const isOnlinePaid = order.paymentMethod === 'online' && order.paymentStatus === 'paid'
+  
   const payload = {
-    shippingStatus: 'cancelled',
-    adminComment: 'Cancelled by customer before confirmation.',
+    shippingStatus: isOnlinePaid ? 'cancelled_refund_pending' : 'cancelled',
+    cancelReason: cancelReason.trim() || 'Cancelled by customer',
     cancelledAt: serverTimestamp(),
     cancelledBy: user.uid,
+    updatedAt: serverTimestamp(),
   }
+  
+  // If online paid, also set refund_status so admin sees it
+  if (isOnlinePaid) {
+    payload.refund_status = 'requested'
+    payload.refund_reason = cancelReason.trim() || 'Order cancelled by customer (online payment)'
+    payload.refund_requested_by = user.uid
+    payload.refund_requested_at = serverTimestamp()
+  }
+  
   await updateDoc(ref, payload)
   await createAuditLog('CUSTOMER_CANCEL_ORDER', 'order', orderId, order, payload)
 }
@@ -842,40 +945,238 @@ export async function rejectReplacementInDb(orderId, reason) {
 }
 
 // ✨ CORE ORDER CREATION LOGIC WITH VALIDATIONS & SIDE-EFFECTS ✨  
+// ─────────────────────────────────────────────────────────────────────────────
+// 🚨 SECURITY: Order creation is now handled server-side via Cloudflare Worker
+// Client-side order creation is DISABLED to prevent manipulation
+// ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * @deprecated This function is INSECURE and DISABLED.
+ * Orders must be created via the server-side worker at /api/create-order.
+ * This function now throws an error to prevent misuse.
+ */
 export const createCustomerOrderDocument = async (orderPayload) => {
-  const user = auth.currentUser
-  if (!user) throw new Error('NOT_LOGGED_IN')
+  console.error('❌ SECURITY ERROR: createCustomerOrderDocument is deprecated and disabled.');
+  console.error('✅ Use the server-side endpoint: /api/create-order');
+  throw new Error('Order creation is only allowed via server-side endpoint. Please refresh and try again.');
+};
 
-  try {
-    const orderRef = await addDoc(collection(db, 'orders'), {
-      ...orderPayload,
-      userId: user.uid,
-      customerEmail: user.email || orderPayload.customerEmail || null,
-      shippingStatus: 'pending',
-      trackingId: 'PENDING_DISPATCH',
-      createdAt: serverTimestamp()
-    })
-
-    await createAuditLog('CREATE_ORDER', 'order', orderRef.id, null, orderPayload)
-
-    await setDoc(doc(db, 'carts', user.uid), { items: [] }, { merge: true })
-
-    if (orderPayload.couponCode) {
-      try {
-        const couponRef = doc(db, 'coupons', orderPayload.couponCode.toUpperCase())
-        await updateDoc(couponRef, { usageCount: increment(1) })
-      } catch (couponErr) {
-        console.warn('Database Layer — Failed to increment coupon usage count:', couponErr)
-      }
-    }
-
-    return orderRef.id
-  } catch (error) {
-    console.error("Database Layer — Failed executing order document creation block:", error)
-    throw error
+/**
+ * ✅ SECURE: Creates an order via Cloudflare Worker
+ * This is the RECOMMENDED way to create orders.
+ * 
+ * @param {Object} orderPayload - The order data (items, address, paymentMethod, totalAmount, etc.)
+ * @returns {Promise<Object>} - { orderId, razorpayOrder, razorpayKey }
+ */
+export const calculateOrderSecure = async (items, couponCode) => {
+  const user = auth.currentUser;
+  if (!user) throw new Error('NOT_LOGGED_IN');
+  const idToken = await user.getIdToken();
+  const res = await fetch('/api/calculate-order', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${idToken}`,
+    },
+    body: JSON.stringify({ items, couponCode }),
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error || 'Calculation failed');
   }
+  return await res.json();
+};
+
+export const createOrderSecure = async (orderPayload) => {
+  const user = auth.currentUser;
+  if (!user) throw new Error('NOT_LOGGED_IN');
+  
+  try {
+    const idToken = await user.getIdToken();
+    
+    const response = await fetch('/api/create-order', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${idToken}`,
+      },
+      body: JSON.stringify(orderPayload),
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Order creation failed');
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('createOrderSecure error:', error);
+    throw error;
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 💰 REFUND MANAGEMENT
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * User requests a refund for an order
+ * Only allowed if: paymentStatus === 'paid' AND shippingStatus === 'cancelled'
+ */
+export async function requestRefund(orderId, reason) {
+  const user = auth.currentUser;
+  if (!user) throw new Error('NOT_LOGGED_IN');
+  if (!orderId) throw new Error('ORDER_ID_REQUIRED');
+  if (!reason?.trim()) throw new Error('REFUND_REASON_REQUIRED');
+
+  const orderRef = doc(db, 'orders', orderId);
+  const snap = await getDoc(orderRef);
+  if (!snap.exists()) throw new Error('ORDER_NOT_FOUND');
+  
+  const order = snap.data();
+  if (order.userId !== user.uid) throw new Error('ORDER_ACCESS_DENIED');
+  
+  // Only online paid orders can request refund
+  if (order.paymentMethod !== 'online' || order.paymentStatus !== 'paid')
+    throw new Error('ONLY_ONLINE_PAID_ORDERS_CAN_BE_REFUNDED');
+  
+  // Must be in cancelled state
+  if (!['cancelled', 'cancelled_refund_pending'].includes(order.shippingStatus))
+    throw new Error('ONLY_CANCELLED_ORDERS_CAN_BE_REFUNDED');
+
+  await updateDoc(orderRef, {
+    refund_status: 'requested',
+    refund_reason: reason.trim(),
+    refund_requested_by: user.uid,
+    refund_requested_at: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+
+  await createAuditLog('REFUND_REQUESTED', 'order', orderId, null, { reason: reason.trim() });
 }
+
+/**
+ * Admin approves a refund
+ */
+export async function approveRefund(orderId) {
+  const user = auth.currentUser;
+  if (!user) throw new Error('NOT_LOGGED_IN');
+  
+  const role = await fetchUserRole();
+  if (!['admin', 'superadmin'].includes(role)) throw new Error('ADMIN_ONLY');
+
+  await updateDoc(doc(db, 'orders', orderId), {
+    refund_status: 'approved',
+    refund_approved_by: user.uid,
+    refund_approved_at: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+
+  await createAuditLog('REFUND_APPROVED', 'order', orderId, null, { approvedBy: user.uid });
+}
+
+/**
+ * Admin rejects a refund with reason
+ */
+export async function rejectRefund(orderId, reason) {
+  const user = auth.currentUser;
+  if (!user) throw new Error('NOT_LOGGED_IN');
+  
+  const role = await fetchUserRole();
+  if (!['admin', 'superadmin'].includes(role)) throw new Error('ADMIN_ONLY');
+  if (!reason?.trim()) throw new Error('REJECT_REASON_REQUIRED');
+
+  await updateDoc(doc(db, 'orders', orderId), {
+    refund_status: 'rejected',
+    refund_reject_reason: reason.trim(),
+    refund_rejected_at: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+
+  await createAuditLog('REFUND_REJECTED', 'order', orderId, null, { reason: reason.trim() });
+}
+
+/**
+ * Admin marks refund as completed (money sent to customer)
+ */
+export async function completeRefund(orderId) {
+  const user = auth.currentUser;
+  if (!user) throw new Error('NOT_LOGGED_IN');
+  
+  const role = await fetchUserRole();
+  if (!['admin', 'superadmin'].includes(role)) throw new Error('ADMIN_ONLY');
+
+  await updateDoc(doc(db, 'orders', orderId), {
+    refund_status: 'completed',
+    refunded_at: serverTimestamp(),
+    shippingStatus: 'refunded',
+    updatedAt: serverTimestamp(),
+  });
+
+  await createAuditLog('REFUND_COMPLETED', 'order', orderId, null, { completedBy: user.uid });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 💳 RAZORPAY PAYMENTS (Admin) – with Charge Calculation
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Calculate Razorpay charge (2%) and net amount
+ * @param {number} amount - Amount in paise (Razorpay format)
+ * @returns {Object} - { charge, chargeDisplay, netAmount, netDisplay }
+ */
+export function calculateRazorpayCharge(amount) {
+  // Amount is in paise (e.g., 199900)
+  const amountInRupees = amount / 100;
+  
+  // 2% charge + 18% GST on the charge = 2.36% total
+  // Standard Razorpay: 2% + GST (18%) = 2.36%
+  const chargePercentage = 2.36; // 2% + 18% GST
+  const charge = (amountInRupees * chargePercentage) / 100;
+  const netAmount = amountInRupees - charge;
+  
+  return {
+    charge: charge,
+    chargeDisplay: '₹' + charge.toFixed(2),
+    netAmount: netAmount,
+    netDisplay: '₹' + netAmount.toFixed(2),
+    percentage: chargePercentage + '%'
+  };
+}
+
+/**
+ * Fetch payments directly from Razorpay API via Cloudflare Worker
+ * @param {number} count - Number of payments to fetch (default: 20)
+ * @param {number} skip - Number of payments to skip (for pagination)
+ * @returns {Promise<Object>} - Razorpay API response with payments array
+ */
+export const fetchRazorpayPayments = async (count = 20, skip = 0) => {
+  const user = auth.currentUser;
+  if (!user) throw new Error('NOT_LOGGED_IN');
+  
+  const role = await fetchUserRole();
+  if (!['admin', 'superadmin'].includes(role)) {
+    throw new Error('ADMIN_ACCESS_REQUIRED');
+  }
+  
+  const idToken = await user.getIdToken();
+  const res = await fetch(`/api/razorpay-payments?count=${count}&skip=${skip}`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${idToken}`,
+    },
+  });
+  
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error || 'Failed to fetch Razorpay payments');
+  }
+  
+  return await res.json();
+};
+
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 📊 ADMIN ANALYTICS & DASHBOARD DATA
 // ─────────────────────────────────────────────────────────────────────────────  
@@ -896,7 +1197,8 @@ export async function fetchAdminAnalytics() {
   const statusCounts = {
     pending: 0, confirmed: 0, shipped: 0, delivered: 0,
     return_requested: 0, replacement_requested: 0,
-    cancelled_refund_pending: 0, returned_refund_pending: 0
+    cancelled_refund_pending: 0, returned_refund_pending: 0,
+    refund_requested: 0, refund_approved: 0, refund_completed: 0
   }
 
   ordersSnap.forEach(d => {
@@ -908,6 +1210,8 @@ export async function fetchAdminAnalytics() {
     // Tally exact statuses
     const status = data.shippingStatus || 'pending'
     if (statusCounts[status] !== undefined) statusCounts[status]++
+    const refundStatus = data.refund_status
+    if (refundStatus && statusCounts['refund_' + refundStatus] !== undefined) statusCounts['refund_' + refundStatus]++
 
     const date = data.createdAt?.toDate ? data.createdAt.toDate() : data.createdAt ? new Date(data.createdAt) : null
     if (date) {
@@ -1291,4 +1595,289 @@ export async function logAudit(action, details = {}) {
     performedByEmail: user?.email || null,
     createdAt: serverTimestamp()
   })
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🏔️ LANDING PAGE CONFIGURATION
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Fetch landing page configuration from Firestore
+ * Config is stored in 'landingConfig' collection with docId 'main'
+ */
+export async function fetchLandingConfig() {
+  try {
+    const snap = await getDoc(doc(db, 'landingConfig', 'main'))
+    if (snap.exists()) {
+      return snap.data()
+    }
+    // Return default config matching landing.vue structure
+    return getDefaultLandingConfig()
+  } catch (e) {
+    console.error('fetchLandingConfig error:', e)
+    return getDefaultLandingConfig()
+  }
+}
+
+/**
+ * Default landing configuration matching landing.vue hardcoded values
+ */
+function getDefaultLandingConfig() {
+  return {
+    cards: [
+      {
+        id: 'c1',
+        style: 'distort',
+        size: 'lg',
+        label: 'Liquid Distort',
+        image: 'https://firebasestorage.googleapis.com/v0/b/pahadse-13309.firebasestorage.app/o/contact%2Ffounder.jpg?alt=media&token=afb61aba-bbba-4974-a4d2-4416332d01db',
+        imgOffsetX: 0,
+        imgOffsetY: 0,
+        imgScale: 1.05,
+        rotation: -6,
+        initialZ: 3
+      },
+      {
+        id: 'c2',
+        style: 'distort',
+        size: 'sm',
+        label: 'Liquid Distort',
+        image: 'https://firebasestorage.googleapis.com/v0/b/pahadse-13309.firebasestorage.app/o/contact%2Fvillage.jpg?alt=media&token=87f75b78-6bc9-40b0-965a-09efd60260d4',
+        imgOffsetX: 0,
+        imgOffsetY: 0,
+        imgScale: 1.1,
+        rotation: 4,
+        initialZ: 2
+      },
+      {
+        id: 'c3',
+        style: 'specular',
+        size: 'md',
+        label: 'Specular Glass',
+        image: 'https://images.unsplash.com/photo-1556881286-fc6915169721?w=400&h=400&fit=crop',
+        imgOffsetX: 0,
+        imgOffsetY: 0,
+        imgScale: 1.1,
+        rotation: -3,
+        initialZ: 5
+      },
+      {
+        id: 'c4',
+        style: 'specular',
+        size: 'sm',
+        label: 'Specular Glass',
+        image: 'https://firebasestorage.googleapis.com/v0/b/pahadse-13309.firebasestorage.app/o/contact%2Fhero2.jpg?alt=media&token=ff12c12e-3078-411a-bc76-f36b6928eaf1',
+        imgOffsetX: 0,
+        imgOffsetY: 0,
+        imgScale: 1.1,
+        rotation: 7,
+        initialZ: 4
+      },
+      {
+        id: 'c5',
+        style: 'frosted',
+        size: 'md',
+        label: 'Simple Frosted',
+        image: 'https://firebasestorage.googleapis.com/v0/b/pahadse-13309.firebasestorage.app/o/contact%2Fvillage-women.jpg?alt=media&token=2b210d97-e255-499f-a4ab-98f6f67da6bc',
+        imgOffsetX: 0,
+        imgOffsetY: 0,
+        imgScale: 1.1,
+        rotation: -8,
+        initialZ: 1
+      },
+    ],
+    scatteredImages: {
+      desktop: [
+        { src: '/images/image1.avif', x: 45, y: 7, width: 16, rotation: -70 },
+        { src: '/images/image2.avif', x: 21.5, y: 80.5, width: 10, rotation: 390 },
+        { src: '/images/image3.avif', x: 33, y: 106, width: 6, rotation: -245 },
+        { src: '/images/image4.avif', x: 73.43666702411234, y: 200.4175654853623, width: 26.5, rotation: 0 },
+        { src: '/images/image7.avif', x: 69.49982255379554, y: -0.22958397534668679, width: 34, rotation: 0 },
+        { src: '/images/image8.avif', x: 74, y: 102, width: 31, rotation: -5 },
+        { src: '/images/image9.avif', x: 0.2440944881889768, y: 0.6070878274268605, width: 23.6, rotation: 0 },
+        { src: '/images/image11.avif', x: -2.5, y: 106, width: 47, rotation: 190 },
+        { src: '/images/image12.avif', x: 20.252918287937735, y: 8.534668721109398, width: 16.5, rotation: 30 }
+      ],
+      tablet: [
+        { src: '/images/image1.avif', x: 42.29268292682925, y: 10.08782742681048, width: 26, rotation: -45 },
+        { src: '/images/image2.avif', x: 67.5, y: 93, width: 15.5, rotation: 275 },
+        { src: '/images/image3.avif', x: 4.5, y: 79.5, width: 9, rotation: -245 },
+        { src: '/images/image4.avif', x: 66.67080745341613, y: 218.37442218798145, width: 33, rotation: 0 },
+        { src: '/images/image7.avif', x: 66.53658536585358, y: 0.5408320493066252, width: 33.5, rotation: 0 },
+        { src: '/images/image8.avif', x: 62.5, y: 109.5, width: 44.5, rotation: 0 },
+        { src: '/images/image9.avif', x: 0.2317073170731706, y: 0.46224961479198773, width: 27.5, rotation: 0 },
+        { src: '/images/image11.avif', x: 0, y: 104, width: 59, rotation: 180 },
+        { src: '/images/image12.avif', x: -2.980487804878048, y: 150, width: 20, rotation: 10 }
+      ],
+      mobile: [
+        { src: '/images/image1.avif', x: 52.264102564102544, y: 6.019414483821265, width: 32, rotation: -50 },
+        { src: '/images/image2.avif', x: 2.5, y: 120, width: 20.5, rotation: 75 },
+        { src: '/images/image3.avif', x: 16.88461538461537, y: -1.6571648690292755, width: 12.5, rotation: -245 },
+        { src: '/images/image4.avif', x: 45.5, y: 115, width: 54, rotation: 360 },
+        { src: '/images/image7.avif', x: 61.12820512820514, y: 0.17041602465331301, width: 40, rotation: 0 },
+        { src: '/images/image8.avif', x: 51.5, y: 52, width: 56.5, rotation: 0 },
+        { src: '/images/image9.avif', x: -8.430769230769226, y: 0.15408320493066296, width: 44.5, rotation: 0 },
+        { src: '/images/image11.avif', x: -4, y: 45, width: 65, rotation: 550 },
+        { src: '/images/image12.avif', x: 14.902564102564089, y: 8.44684129429891, width: 31.5, rotation: 15 }
+      ]
+    },
+    hero: {
+      title: 'Pahad',
+      subtitle: 'S',
+      tagline: 'From the Himalayas with love 🌿'
+    },
+    story: {
+      eyebrow: 'Our Story',
+      heading: 'Straight from the <span class="accent">Pahad</span>,<br>to your kitchen table',
+      body: "We're a small team sourcing genuinely traditional Himalayan produce — the way our grandparents made it, not the way a factory does. Everything we sell is made in small batches by families across Himachal, with nothing added and nothing cut out."
+    },
+    socialLinks: [
+      { label: 'Instagram', emoji: '📷', href: '#' },
+      { label: 'Facebook', emoji: '📘', href: '#' },
+      { label: 'YouTube', emoji: '▶️', href: '#' }
+    ],
+    updatedAt: null
+  }
+}
+
+/**
+ * Save landing page configuration to Firestore
+ */
+export async function saveLandingConfig(config) {
+  try {
+    const payload = {
+      ...config,
+      updatedAt: serverTimestamp()
+    }
+    await setDoc(doc(db, 'landingConfig', 'main'), payload, { merge: true })
+    return { success: true }
+  } catch (e) {
+    console.error('saveLandingConfig error:', e)
+    return { success: false, error: e.message }
+  }
+}
+
+/**
+ * Upload landing page image to Firebase Storage
+ * @param {File} file - Image file to upload
+ * @param {string} cardId - Card identifier (c1-c5) or 'scattered'
+ * @returns {Promise<string>} - Download URL
+ */
+export async function uploadLandingImage(file, cardId) {
+  const options = {
+    maxSizeMB: 1,
+    maxWidthOrHeight: 1600,
+    useWebWorker: true
+  }
+  const compressedFile = await imageCompression(file, options)
+  const fileExt = file.name.split('.').pop()
+  const filePath = `landing/${cardId}/${Date.now()}_${Math.floor(Math.random() * 1000)}.${fileExt}`
+
+  const imageRef = storageRef(storage, filePath)
+  await uploadBytes(imageRef, compressedFile)
+  return await getDownloadURL(imageRef)
+}
+
+/**
+ * Delete landing image from Storage
+ */
+export async function deleteLandingImage(fileUrl) {
+  if (!fileUrl || !fileUrl.includes('firebasestorage.googleapis.com')) return
+  try {
+    const fileRef = storageRef(storage, fileUrl)
+    await deleteObject(fileRef)
+  } catch (e) {
+    console.warn('deleteLandingImage failed:', e.message)
+  }
+}
+
+/**
+ * Fetch About Page configuration
+ * Config is stored in 'aboutConfig' collection with docId 'main'
+ */
+export async function fetchAboutConfig() {
+  try {
+    const snap = await getDoc(doc(db, 'aboutConfig', 'main'))
+    if (snap.exists()) {
+      return snap.data()
+    }
+    return getDefaultAboutConfig()
+  } catch (e) {
+    console.error('fetchAboutConfig error:', e)
+    return getDefaultAboutConfig()
+  }
+}
+
+/**
+ * Default About Page configuration matching about.vue structure
+ */
+function getDefaultAboutConfig() {
+  return {
+    images: {
+      hero: 'https://firebasestorage.googleapis.com/v0/b/pahadse-13309.firebasestorage.app/o/contact%2Fhero2.jpg?alt=media&token=ff12c12e-3078-411a-bc76-f36b6928eaf1',
+      village: 'https://firebasestorage.googleapis.com/v0/b/pahadse-13309.firebasestorage.app/o/contact%2Fvillage-women.jpg?alt=media&token=2b210d97-e255-499f-a4ab-98f6f67da6bc',
+      family: 'https://firebasestorage.googleapis.com/v0/b/pahadse-13309.firebasestorage.app/o/contact%2Fvillage.jpg?alt=media&token=87f75b78-6bc9-40b0-a4ab-98f6f67da6bc',
+      valley: 'https://images.pexels.com/photos/3057904/pexels-photo-3057904.jpeg',
+      founder: 'https://firebasestorage.googleapis.com/v0/b/pahadse-13309.firebasestorage.app/o/contact%2Ffounder.jpg?alt=media&token=afb61aba-bbba-4974-a4d2-4416332d01db'
+    },
+    text: {
+      heroTitle: 'Life in the Himalayas',
+      heroSubtitle: 'Seedha Pahadon Se: Shuddh, Pahari, Asli',
+      section1Title: 'The Mountain Way of Life',
+      section1Body: 'The Himalayan region is known for its pristine environment, traditional lifestyles, and rich agricultural heritage. For us, the mountains are not just where we live—they are the very essence of who we are.\n\nDaily life here is dictated by the rhythm of changing seasons, the flow of natural springs, and a profound connection to the land. In our households, ancient methods of preparing food are not just remembered; they are actively practiced. These traditions, passed down through generations, are the soul of every product we bring to your table.',
+      section2Title: 'Bridging Communities to You',
+      section2Body: '<strong>PahadS</strong> is more than a storefront; it is a bridge connecting you directly to the authentic mountain families of Himachal Pradesh. We don\'t own large farms — instead, we work with and support multiple small-scale producers across Seraj Valley.\n\nWe collect pure Bilona ghee, traditional oils, raw spices, and forest honey from local families who have perfected their craft over generations. Our role is to bring their honest, traditional products to customers who appreciate authenticity.\n\n<ul class="mission-list">\n  <li><strong>Support Local Families:</strong> We source from 25+ households across the valley, not just one farm.</li>\n  <li><strong>Fair Value:</strong> By eliminating middlemen, fair prices reach the actual producers.</li>\n  <li><strong>Preserve Heritage:</strong> Every purchase helps sustain traditional knowledge and skills.</li>\n  <li><strong>Authentic Products:</strong> What you receive is exactly what the mountain families prepared.</li>\n</ul>\nWe are simply the messenger. The real heroes are the mountain families who wake up before sunrise, tend to their livestock, harvest wild forest produce, and prepare food the way their ancestors did.',
+      founderTitle: 'Meet Our Founder',
+      founderBody: '<strong>Bhawani Dutt</strong> was born and raised in the heart of Himachal Pradesh, surrounded by the very mountains and communities that PahadS now serves.\n\nAfter spending years in the corporate world, he realized that the traditional knowledge of his homeland was slowly fading away. The younger generation was moving to cities, and the ancient practices of making pure Bilona ghee, cold-pressed oils, and forest honey were being replaced by mass-produced alternatives.\n\nThat\'s when he decided to return to his roots. PahadS was born not as a business, but as a mission — to bridge the gap between authentic mountain producers and conscious consumers.\n\n<em>"I don\'t own farms or produce everything myself. What I do have is deep respect for the mountain families I grew up around. PahadS is my effort to bring their honest work to people who will appreciate it."</em>',
+      founderQuote: 'I don\'t own farms or produce everything myself. What I do have is deep respect for the mountain families I grew up around. PahadS is my effort to bring their honest work to people who will appreciate it. Every order means one more family in these hills gets fair value for their traditional skills.',
+      founderName: 'Bhawani Dutt',
+      communityText: 'From this small valley, we coordinate with local families who produce traditional goods using methods passed down for generations. We don\'t own farms — we partner with families who do.',
+      thankYouTitle: 'Thank You',
+      thankYouBody: 'Thank you for visiting PahadS.\n\nYour support helps preserve traditional knowledge, supports multiple families across Himachal Pradesh, and encourages us to continue bridging the gap between authentic mountain producers and conscious customers like you.\n\nWe look forward to serving you.'
+    }
+  }
+}
+
+/**
+ * Save About Page Configuration
+ */
+export async function saveAboutConfig(config) {
+  try {
+    await setDoc(doc(db, 'aboutConfig', 'main'), config, { merge: true })
+    return { success: true }
+  } catch (e) {
+    console.error('saveAboutConfig error:', e)
+    return { success: false, error: e.message }
+  }
+}
+
+/**
+ * Upload About Page image to Firebase Storage
+ */
+export async function uploadAboutImage(file, imageKey) {
+  const options = {
+    maxSizeMB: 1,
+    maxWidthOrHeight: 1600,
+    useWebWorker: true
+  }
+  const compressedFile = await imageCompression(file, options)
+  const fileExt = file.name.split('.').pop()
+  const filePath = `about/${imageKey}/${Date.now()}_${Math.floor(Math.random() * 1000)}.${fileExt}`
+
+  const imageRef = storageRef(storage, filePath)
+  await uploadBytes(imageRef, compressedFile)
+  return await getDownloadURL(imageRef)
+}
+
+/**
+ * Delete About Page image from Storage
+ */
+export async function deleteAboutImage(fileUrl) {
+  if (!fileUrl || !fileUrl.includes('firebasestorage.googleapis.com')) return
+  try {
+    const fileRef = storageRef(storage, fileUrl)
+    await deleteObject(fileRef)
+  } catch (e) {
+    console.warn('deleteAboutImage failed:', e.message)
+  }
 }

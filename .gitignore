@@ -32,3 +32,11 @@ gen.py
 .wrangler/
 .pycache/
 .py
+.aider*
+front/.env
+front/.env.*
+front/.dev.vars
+front/.wrangler/
+front/.pycache/
+front/py1.py
+front/node_modules/

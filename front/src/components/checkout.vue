@@ -3,16 +3,55 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { db, auth } from '../firebase.js'
 import { doc, getDoc } from 'firebase/firestore'
-import { createCustomerOrderDocument, fetchShippingConfig, fetchCart } from './db.js'
+import { fetchShippingConfig, fetchCart, createOrderSecure, fetchCartItemsStock } from './db.js'
 
 defineOptions({ name: 'Checkout' })
 const router = useRouter()
 
-const cartItems = ref([]), loading = ref(true), userAccountData = ref(null), processingOrder = ref(false)
-const isCodGloballyActive = ref(true), selectedAddressId = ref(''), selectedPaymentMethod = ref('online')
+const cartItems = ref([])
+const loading = ref(true)
+const userAccountData = ref(null)
+const processingOrder = ref(false)
+const isCodGloballyActive = ref(true)
+const selectedAddressId = ref('')
+const selectedPaymentMethod = ref('online')
 const appliedPromoCode = ref(window.sessionStorage.getItem('active_promo_code') || null)
 const appliedPromoDiscount = ref(Number(window.sessionStorage.getItem('active_promo_discount')) || 0)
 const shippingConfig = ref({ fee: 60, freeThreshold: 499, isFreeShippingActive: true })
+const stockMap = ref(new Map())
+const stockLoading = ref(false)
+
+async function refreshStock() {
+  if (!cartItems.value.length) { stockMap.value = new Map(); return }
+  stockLoading.value = true
+  try {
+    stockMap.value = await fetchCartItemsStock(cartItems.value)
+  } catch (e) { console.warn('Stock refresh failed:', e) }
+  finally { stockLoading.value = false }
+}
+
+function getItemStockInfo(item) {
+  const key = `${item.productId}::${item.variant || item.weight || 'Standard'}`
+  return stockMap.value.get(key) || null
+}
+
+function isItemOutOfStock(item) {
+  const info = getItemStockInfo(item)
+  if (!info) return false
+  return info.stock === 0 || !info.isActive || !info.variantActive
+}
+
+function getStockLabel(item) {
+  const info = getItemStockInfo(item)
+  if (!info) return ''
+  if (!info.isActive) return 'Unavailable'
+  if (!info.variantActive) return 'Variant Unavailable'
+  if (info.stock === 0) return 'Out of Stock'
+  if (info.stock < item.quantity) return `Only ${info.stock} left`
+  return ''
+}
+
+const hasOutOfStockItems = computed(() => cartItems.value.some(item => isItemOutOfStock(item)))
 
 onMounted(() => {
   const script = document.createElement('script')
@@ -25,6 +64,9 @@ onMounted(() => {
     try {
       cartItems.value = await fetchCart();
       if (cartItems.value.length === 0) { router.push('/'); return; }
+
+      // Fetch live stock for all cart items
+      await refreshStock()
 
       const userSnap = await getDoc(doc(db, 'users', user.uid))
       if (userSnap.exists()) {
@@ -44,6 +86,7 @@ onMounted(() => {
   })
 })
 
+// These computed values are now **only for UI display** – not used in backend requests.
 const subtotal = computed(() => cartItems.value.reduce((s, i) => s + i.price * i.quantity, 0))
 const shippingCost = computed(() => {
   if (subtotal.value === 0) return 0
@@ -55,56 +98,70 @@ const activeAddressesList = computed(() => userAccountData.value?.addresses || [
 const activeSelectedAddressObject = computed(() => activeAddressesList.value.find(a => a.id === selectedAddressId.value))
 const routeToProfileAddressManager = () => router.push('/user')
 
-const openRazorpayModal = async (finalizedOrderBlueprint) => {
+// ─────────────────────────────────────────────────────────────
+// OPEN RAZORPAY MODAL – receives only the minimal payload
+// ─────────────────────────────────────────────────────────────
+const openRazorpayModal = async (orderPayload) => {
   try {
-    const response = await fetch('/api/create-razorpay-order', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ amount: grandTotal.value })
-    })
+    // orderPayload already has: items, address, paymentMethod, couponCode
+    const data = await createOrderSecure(orderPayload);
     
-    if (!response.ok) throw new Error(`Backend Error (${response.status}): Order creation failed.`)
-    const orderData = await response.json()
-    if (!orderData || !orderData.id) throw new Error("Invalid Razorpay Order ID from backend")
+
+    if (!data.razorpayOrder || !data.razorpayOrder.id) {
+      throw new Error("Invalid Razorpay Order ID from backend");
+    }
+
+    const orderData = data.razorpayOrder;
+    const orderId = data.orderId;
 
     const options = {
-      key: import.meta.env.VITE_RAZORPAY_KEY_ID, 
+      key: data.razorpayKey || import.meta.env.VITE_RAZORPAY_KEY_ID,
       amount: orderData.amount,
       currency: "INR",
-      name: "PahadSe",
+      name: "PahadS",
       description: "Mountain Harvest Provisions",
-      order_id: orderData.id, 
+      order_id: orderData.id,
       handler: async function (paymentResponse) {
         try {
-          processingOrder.value = true
-          
+          processingOrder.value = true;
+
+          // Get the user's ID token
+const idToken = await auth.currentUser.getIdToken();
+
           const verifyRes = await fetch('/api/verify-payment', {
-             method: 'POST', 
-             headers: { 'Content-Type': 'application/json' },
-             body: JSON.stringify(paymentResponse)
-          })
-          
-          if(!verifyRes.ok) throw new Error("Payment signature verification failed. Possible tampering.")
+            method: 'POST',
+            headers: { 
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${idToken}`   // ✅ Added
+            },
+            body: JSON.stringify({
+              razorpay_order_id: paymentResponse.razorpay_order_id,
+              razorpay_payment_id: paymentResponse.razorpay_payment_id,
+              razorpay_signature: paymentResponse.razorpay_signature,
+              orderId: orderId,
+            })
+          });
 
-          finalizedOrderBlueprint.paymentStatus = 'paid'
-          finalizedOrderBlueprint.razorpayPaymentId = paymentResponse.razorpay_payment_id
-          const orderId = await createCustomerOrderDocument(finalizedOrderBlueprint)
-          
-          window.sessionStorage.removeItem('active_promo_discount')
-          window.sessionStorage.removeItem('active_promo_code')
+          if (!verifyRes.ok) {
+            const err = await verifyRes.json();
+            throw new Error(err.error || "Payment verification failed.");
+          }
 
-          alert(`Payment Successful! Order ID: ${orderId}`)
-          router.push('/user') 
-          
+          window.sessionStorage.removeItem('active_promo_discount');
+          window.sessionStorage.removeItem('active_promo_code');
+
+          alert(`Payment Successful! Order ID: ${orderId}`);
+          router.push('/user');
+
         } catch (err) {
-          alert("Error: " + err.message)
-          processingOrder.value = false
+          alert("Error: " + err.message);
+          processingOrder.value = false;
         }
       },
       prefill: {
-        name: finalizedOrderBlueprint.customerName,
+        name: orderPayload.address.fullName,
         email: auth.currentUser?.email || "",
-        contact: finalizedOrderBlueprint.phone
+        contact: orderPayload.address.phone
       },
       theme: { color: "#16a34a" },
       modal: {
@@ -120,46 +177,71 @@ const openRazorpayModal = async (finalizedOrderBlueprint) => {
     rzp.open();
 
   } catch (error) {
-    alert("Could not start Razorpay: " + error.message)
-    processingOrder.value = false
+    alert("Could not start Razorpay: " + error.message);
+    processingOrder.value = false;
   }
-}
+};
 
+// ─────────────────────────────────────────────────────────────
+// PROCESS CHECKOUT SUBMISSION – now sends only essential data
+// ─────────────────────────────────────────────────────────────
 const processCheckoutSubmission = async () => {
-  if (!activeSelectedAddressObject.value) { alert("Please choose a valid destination route address."); return }
-  processingOrder.value = true
-  
-  const target = activeSelectedAddressObject.value
-  const finalizedOrderBlueprint = {
-    customerName: target.fullName,
-    phone: target.phone,
-    address: `${target.streetAddress}, ${target.city}, ${target.state} - ${target.pincode}`,
-    items: cartItems.value.map(i => ({ productId: i.productId, name: i.name, variant: i.variant || i.weight || 'Standard Option', quantity: i.quantity, price: i.price, emoji: i.emoji || '📦', imageUrl: i.imageUrl || null, slug: i.slug || 'product' })),
-    subtotal: subtotal.value, shippingCost: shippingCost.value, couponCode: appliedPromoCode.value, couponDiscount: appliedPromoDiscount.value, amount: grandTotal.value,
-    paymentMethod: selectedPaymentMethod.value, shippingStatus: 'pending', trackingId: 'PENDING_DISPATCH'
+  if (!activeSelectedAddressObject.value) { 
+    alert("Please choose a valid destination route address."); 
+    return; 
   }
+  processingOrder.value = true;
+
+  const target = activeSelectedAddressObject.value;
+
+  // 🔧 Build address with explicit string conversion
+  const address = {
+    fullName: String(target.fullName || '').trim(),
+    streetAddress: String(target.streetAddress || '').trim(),
+    city: String(target.city || '').trim(),
+    state: String(target.state || '').trim(),
+    pincode: String(target.pincode || '').trim(),
+    phone: String(target.phone || '').trim(),
+  };
+
+  // 🧪 Debug: Log the address to verify
+  console.log('📤 Sending address:', address);
+
+  const itemsPayload = cartItems.value.map(i => ({
+    productId: i.productId,
+    variant: i.variant || i.weight || 'Standard Option',
+    variantId: i.variantId || i.variant || i.weight || 'Standard Option',
+    quantity: i.quantity
+  }));
+
+  const basePayload = {
+    items: itemsPayload,
+    address: address,  // ✅ use the validated address
+    paymentMethod: selectedPaymentMethod.value,
+    couponCode: appliedPromoCode.value,
+  };
 
   try {
     if (selectedPaymentMethod.value === 'online') {
-      if(confirm("Test mode active. Proceed to Razorpay gateway?")) {
-        await openRazorpayModal(finalizedOrderBlueprint)
+      if (confirm("Proceed to Razorpay gateway?")) {
+        await openRazorpayModal(basePayload);
       } else {
-        processingOrder.value = false
+        processingOrder.value = false;
       }
     } else {
-      finalizedOrderBlueprint.paymentStatus = 'pending_collection'
-      const orderId = await createCustomerOrderDocument(finalizedOrderBlueprint)
-      window.sessionStorage.removeItem('active_promo_discount')
-      window.sessionStorage.removeItem('active_promo_code')
-      alert(`COD Order Registered! ID: ${orderId}`)
-      router.push('/user') 
+      const data = await createOrderSecure(basePayload);
+      window.sessionStorage.removeItem('active_promo_discount');
+      window.sessionStorage.removeItem('active_promo_code');
+      alert(`COD Order Registered! Order ID: ${data.orderId}`);
+      router.push('/user');
     }
   } catch (error) {
-    alert("Operation aborted: " + error.message)
-    processingOrder.value = false
+    alert("Operation aborted: " + error.message);
+    processingOrder.value = false;
   }
-}
+};
 </script>
+
 
 <template>
   <div class="seamless-checkout-page">
@@ -247,13 +329,22 @@ const processCheckoutSubmission = async () => {
       <aside class="checkout-summary-side">
         <div class="summary-content-wrapper">
           
+          <!-- Out of Stock Warning Banner -->
+          <div v-if="hasOutOfStockItems" class="oos-warning-banner">
+            <span>⚠️</span>
+            <p><strong>Some items are out of stock.</strong> Please remove them before placing your order to avoid errors.</p>
+          </div>
+
           <div class="basket-items-list">
-            <div v-for="(item, idx) in cartItems" :key="idx" class="summary-item-row">
+            <div v-for="(item, idx) in cartItems" :key="idx" :class="['summary-item-row', { 'oos-item-row': isItemOutOfStock(item) }]">
               <div class="item-left">
                 <div class="thumb"><img v-if="item.imageUrl" :src="item.imageUrl" /><span v-else>{{ item.emoji || '🍯' }}</span></div>
                 <div class="info">
                   <strong>{{ item.name }}</strong>
                   <span>{{ item.variant || item.weight || 'Standard' }}</span>
+                  <span v-if="getStockLabel(item)" :class="['stock-badge-checkout', { 'oos': isItemOutOfStock(item), 'low': !isItemOutOfStock(item) }]">
+                    {{ getStockLabel(item) }}
+                  </span>
                   <span class="qty">{{ item.quantity }} × ₹{{ item.price }} = ₹{{ item.price * item.quantity }}</span>
                 </div>
               </div>
@@ -365,6 +456,17 @@ const processCheckoutSubmission = async () => {
 .info span{font-size:.8rem;color:#6b5f55}
 .info .qty{font-size:.82rem;color:#5a4f45;margin-top:2px;font-weight:500}
 .price{font-size:1rem;font-weight:700;color:#1a1a2e}
+
+/* ─── Out of Stock Indicators (Checkout) ─── */
+.oos-warning-banner{background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px 14px;font-size:.82rem;color:#991b1b;line-height:1.4;margin-bottom:14px;display:flex;align-items:flex-start;gap:10px;width:100%;box-sizing:border-box}
+.oos-warning-banner span{font-size:.95rem;flex-shrink:0}
+.oos-warning-banner p{margin:0}
+.stock-badge-checkout{font-size:0.6rem;font-weight:700;padding:1px 7px;border-radius:100px;display:inline-block;text-transform:uppercase;letter-spacing:0.3px;margin-top:2px}
+.stock-badge-checkout.oos{background:#fef2f2;color:#dc2626;border:1px solid #fecaca}
+.stock-badge-checkout.low{background:#fef3c7;color:#92400e;border:1px solid #fde68a}
+.oos-item-row{opacity:0.65;background:#fefbfb;border-left:3px solid #dc2626;padding-left:8px}
+.oos-item-row .info strong{color:#9a8a7a;text-decoration:line-through}
+.oos-item-row .price{color:#9a8a7a;text-decoration:line-through}
 
 /* ─── LEDGER ─── */
 .ledger-section{border-top:1px solid #ede8e2;border-bottom:1px solid #ede8e2;padding:14px 0;margin-bottom:16px;display:flex;flex-direction:column;gap:6px;width:100%}

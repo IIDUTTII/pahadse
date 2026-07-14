@@ -37,7 +37,7 @@ const loginWithGoogle = async () => {
   try {
     loading.value = true; errorMessage.value = ''; successMessage.value = ''
     await signInWithPopup(auth, provider)
-    router.push('/')
+    router.push('/products')
   } catch (error) { 
     errorMessage.value = error.message 
   } finally { 
@@ -85,7 +85,7 @@ const toggleViewMode = (targetView) => {
         <div class="overlay-shader"></div>
         <div class="brand-narrative-content">
           <span class="narrative-icon">🏔️</span>
-          <h3>PahadSe</h3>
+          <h3>PahadS</h3>
           <p class="tagline">Welcome back to the source.</p>
           <span class="image-location-tag">📍 Mandi, Himachal Pradesh</span>
         </div>
@@ -133,7 +133,7 @@ const toggleViewMode = (targetView) => {
           </button>
 
           <footer class="pane-footer-switch">
-            <p>New to PahadSe? <router-link to="/register" class="inline-switch-link">Create Account Here</router-link></p>
+            <p>New to PahadS? <router-link to="/register" class="inline-switch-link">Create Account Here</router-link></p>
           </footer>
         </div>
 

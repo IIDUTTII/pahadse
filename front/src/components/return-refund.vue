@@ -19,7 +19,7 @@ defineOptions({
         <div class="section-block">
           <h2>1. Nature of Products</h2>
           <ul class="legal-list">
-            <li>PahadSe specializes in natural, traditional, and food-based products sourced from Himalayan regions.</li>
+            <li>PahadS specializes in natural, traditional, and food-based products sourced from Himalayan regions.</li>
             <li>Products may include Bilona Ghee, Traditional Oils, Raw Spices, Honey, Food Products, and other Himalayan Products.</li>
             <li>Due to their pure, organic, and perishable nature, returns are generally not accepted after successful delivery.</li>
           </ul>
@@ -48,8 +48,8 @@ defineOptions({
         <div class="section-block">
           <h2>4. Refund Policy</h2>
           <ul class="legal-list">
-            <li>Refunds may be issued only where a replacement is not possible, the order cannot be fulfilled, or PahadSe determines a refund is appropriate after review.</li>
-            <li>Refund approval remains at the sole discretion of PahadSe.</li>
+            <li>Refunds may be issued only where a replacement is not possible, the order cannot be fulfilled, or PahadS determines a refund is appropriate after review.</li>
+            <li>Refund approval remains at the sole discretion of PahadS.</li>
             <li>Approved refunds will be processed through the original payment method whenever possible.</li>
           </ul>
         </div>
@@ -68,7 +68,7 @@ defineOptions({
           <h2>6. Dispatch Timeline</h2>
           <ul class="legal-list">
             <li>Orders are generally dispatched within 1–2 business days.</li>
-            <li>PahadSe reserves the right to delay dispatch when necessary, or cancel orders due to operational limitations or stock availability issues.</li>
+            <li>PahadS reserves the right to delay dispatch when necessary, or cancel orders due to operational limitations or stock availability issues.</li>
           </ul>
         </div>
 
@@ -98,7 +98,7 @@ defineOptions({
           <h2>9. Delivery Delays</h2>
           <ul class="legal-list">
             <li>Delivery timelines may be affected by weather conditions, landslides, road closures, natural disasters, courier disruptions, or government restrictions.</li>
-            <li>PahadSe shall not be liable for delays caused by circumstances beyond reasonable control.</li>
+            <li>PahadS shall not be liable for delays caused by circumstances beyond reasonable control.</li>
           </ul>
         </div>
 
@@ -106,7 +106,7 @@ defineOptions({
         <div class="section-block">
           <h2>10. Contact Information</h2>
           <ul class="legal-list">
-            <li><strong>PahadSe</strong></li>
+            <li><strong>PahadS</strong></li>
             <li>Address: Seraj Valley, Mandi, Himachal Pradesh, India</li>
             <li>Email: care@pahadse.com</li>
             <li>Phone: +91 XXXXX XXXXX</li>

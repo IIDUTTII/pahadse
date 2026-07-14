@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { subscribeToProductsLimited, toggleProductActive, deleteProduct } from '../db.js'
 
@@ -11,9 +11,21 @@ const products = ref([])
 const loadLimit = ref(6) 
 let _unsubProducts = null
 
+const loadProducts = () => {
+  if (_unsubProducts) _unsubProducts()
+
+  _unsubProducts = subscribeToProductsLimited(loadLimit.value, snap => {
+    products.value = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+  })
+}
+
+onUnmounted(() => {
+  if (_unsubProducts) _unsubProducts()
+})
+
 watch(loadLimit, (newLimit) => {
   if (_unsubProducts) _unsubProducts()
-  
+
   _unsubProducts = subscribeToProductsLimited(newLimit, snap => {
     products.value = snap.docs.map(d => ({ id: d.id, ...d.data() }))
   })

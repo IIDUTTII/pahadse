@@ -67,8 +67,8 @@ function closeMobileMenu() { mobileMenuOpen.value = false }
   >
     <div class="tb-left">
       <router-link to="/" class="logo-link">
-        <img src="../assets/logo.png" alt="PahadSe" class="logo-img" />
-        <span class="logo-text">PahadSe</span>
+        <img src="../assets/logo.png" alt="PahadS" class="logo-img" />
+        <span class="logo-text">PahadS</span>
       </router-link>
     </div>
 
@@ -162,12 +162,12 @@ function closeMobileMenu() { mobileMenuOpen.value = false }
 .tb-left { display: flex; align-items: center; padding-left: 20px; }
 .logo-link { display: flex; align-items: center; gap: 10px; text-decoration: none; }
 .logo-img { width: 62px; height: 62px; object-fit: contain; filter: drop-shadow(0 2px 5px rgba(0,0,0,0.1)); }
-.logo-text { 
-  font-family: 'Playfair Display', serif; 
-  font-size: 24px; 
+.logo-text {
+  font-family: 'Playfair Display', serif;
+  font-size: 24px;
   font-weight: 800;
-  color: #0F2A1F !important; 
-  white-space: nowrap; 
+  color: #0F2A1F !important;
+  white-space: nowrap;
 }
 
 .desktop-nav {
