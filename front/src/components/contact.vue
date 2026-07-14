@@ -56,116 +56,120 @@ const handleContactSubmit = async () => {
 
 <template>
   <div class="contact-page-wrapper">
-    <div class="contact-container">
-      
-      <!-- Header -->
-      <header class="contact-header">
-        <h1>Get in Touch Life</h1>
-        <p>Whether you have a question about our mountain provisions, bulk orders, or your recent delivery, we are here to help.</p>
-        <div class="divider"></div>
-      </header>
-
-      <div class="contact-layout-grid">
-        
-        <!-- Left Pane: Contact Information with Photo -->
-        <aside class="contact-info-pane">
-          <!-- Mountain Photo -->
-          <div class="mountain-photo">
-            <img 
-              src="https://firebasestorage.googleapis.com/v0/b/pahadse-13309.firebasestorage.app/o/contact%2Fcontact1.jpg?alt=media&token=4bd4d9a2-24be-4067-88ac-2aee1f6dba9a" 
-              alt="Seraj Valley, Himachal Pradesh - Where PahadS sources its pure mountain products"
-              class="seraj-valley-img"
-            >
-            <div class="photo-caption">
-              <span>🏔️</span> Seraj Valley, Mandi — Our Home
-            </div>
-          </div>
-
-          <div class="info-card">
-            <h3>Direct Contact</h3>
-            <p class="info-subtext">Reach out to us directly through our official channels.</p>
-            
-            <div class="contact-methods">
-              <div class="method-row">
-                <span class="method-icon">📧</span>
-                <div>
-                  <strong>Email Us</strong>
-                  <p>care@pahadse.com</p>
-                </div>
-              </div>
-              <div class="method-row">
-                <span class="method-icon">📞</span>
-                <div>
-                  <strong>Call / WhatsApp</strong>
-                  <p>+91 98765 43210</p>
-                  <p class="timing-note">Mon-Sat: 9 AM to 6 PM</p>
-                </div>
-              </div>
-              <div class="method-row">
-                <span class="method-icon">🏔️</span>
-                <div>
-                  <strong>Mountain Base</strong>
-                  <p>PahadS Distribution Hub,<br>Mandi, Himachal Pradesh - 175001</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </aside>
-
-        <!-- Right Pane: The Form -->
-        <main class="contact-form-pane">
-          <div class="form-card">
-            <h3>Send a Message</h3>
-            
-            <!-- Success Message -->
-            <div v-if="successMessage" class="success-banner">
-              ✓ {{ successMessage }}
-            </div>
-
-            <!-- Error Message -->
-            <div v-if="errorMessage" class="error-banner">
-              {{ errorMessage }}
-            </div>
-
-            <form @submit.prevent="handleContactSubmit" class="pahadse-form">
-              
-              <div class="form-grid">
-                <div class="input-field">
-                  <label>Full Name *</label>
-                  <input v-model="formData.name" type="text" placeholder="e.g. Rahul Sharma" class="core-input" />
-                </div>
-                
-                <div class="input-field">
-                  <label>Email Address *</label>
-                  <input v-model="formData.email" type="email" placeholder="you@example.com" class="core-input" />
-                </div>
-
-                <div class="input-field">
-                  <label>Phone Number</label>
-                  <input v-model="formData.phone" type="tel" placeholder="10-digit mobile number" class="core-input" />
-                </div>
-
-                <div class="input-field">
-                  <label>Subject</label>
-                  <input v-model="formData.subject" type="text" placeholder="What is this regarding?" class="core-input" />
-                </div>
-              </div>
-
-              <div class="input-field full-width">
-                <label>Your Query *</label>
-                <textarea v-model="formData.query" rows="5" placeholder="Type your message, question, or issue here..." class="core-input textarea"></textarea>
-              </div>
-
-              <button type="submit" :disabled="isSubmitting" class="submit-btn">
-                {{ isSubmitting ? 'Transmitting...' : 'Send Message' }}
-              </button>
-              
-            </form>
-          </div>
-        </main>
-
+    <!-- Header Section -->
+    <section class="contact-header-section">
+      <div class="header-content">
+        <h1>Get in Touch</h1>
+        <p class="header-subtitle">We're here to help with any questions about our Himalayan products, orders, or general inquiries.</p>
       </div>
-    </div>
+    </section>
+
+    <!-- Main Contact Form Section -->
+    <section class="contact-form-section">
+      <div class="form-container">
+        <div class="form-header">
+          <h2>Send Us a Message</h2>
+          <p class="form-description">Fill out the form below and we'll get back to you shortly.</p>
+        </div>
+
+        <!-- Status Messages -->
+        <div v-if="successMessage" class="status-message success">
+          ✓ {{ successMessage }}
+        </div>
+        <div v-if="errorMessage" class="status-message error">
+          {{ errorMessage }}
+        </div>
+
+        <!-- Contact Form -->
+        <form @submit.prevent="handleContactSubmit" class="contact-form">
+          <div class="form-grid">
+            <!-- Name Field -->
+            <div class="form-group">
+              <label for="name" class="form-label">Full Name *</label>
+              <input
+                id="name"
+                ref="name"
+                v-model="formData.name"
+                type="text"
+                placeholder="Enter your full name"
+                class="form-input"
+                :class="{ 'is-invalid': !formData.name && isSubmitting }"
+                @blur="!formData.name && $refs.name.focus()"
+              />
+            </div>
+
+            <!-- Email Field -->
+            <div class="form-group">
+              <label for="email" class="form-label">Email Address *</label>
+              <input
+                id="email"
+                ref="email"
+                v-model="formData.email"
+                type="email"
+                placeholder="your.email@example.com"
+                class="form-input"
+                :class="{ 'is-invalid': !formData.email && isSubmitting }"
+                @blur="!formData.email && $refs.email.focus()"
+              />
+            </div>
+
+            <!-- Phone Field -->
+            <div class="form-group">
+              <label for="phone" class="form-label">Phone Number (Optional)</label>
+              <input
+                id="phone"
+                v-model="formData.phone"
+                type="tel"
+                placeholder="+91 XXXXXXXXXX"
+                class="form-input"
+              />
+            </div>
+
+            <!-- Subject Field -->
+            <div class="form-group">
+              <label for="subject" class="form-label">Subject</label>
+              <input
+                id="subject"
+                ref="subject"
+                v-model="formData.subject"
+                type="text"
+                placeholder="What is this regarding?"
+                class="form-input"
+              />
+            </div>
+
+            <!-- Message Field -->
+            <div class="form-group full-width">
+              <label for="query" class="form-label">Your Message *</label>
+              <textarea
+                id="query"
+                ref="query"
+                v-model="formData.query"
+                rows="6"
+                placeholder="Please describe your inquiry in detail..."
+                class="form-input textarea"
+                :class="{ 'is-invalid': !formData.query && isSubmitting }"
+                @blur="!formData.query && $refs.query.focus()"
+              />
+            </div>
+          </div>
+
+          <!-- Submit Button -->
+          <div class="form-actions">
+            <button
+              type="submit"
+              class="submit-btn primary"
+              :disabled="isSubmitting"
+            >
+              {{ isSubmitting ? 'Sending Your Message...' : 'Send Message' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <!-- Optional: Contact Info Section (Removed as requested) -->
+    <!-- The "home card" (sidebar with mountain photo and contact info) has been removed per request -->
   </div>
 </template>
 
@@ -180,254 +184,239 @@ const handleContactSubmit = async () => {
   color: #0f172a;
 }
 
-.contact-container {
-  max-width: 1100px;
-  margin: 0 auto;
-}
-
-/* Header */
-.contact-header {
+/* Header Section */
+.contact-header-section {
   text-align: center;
   margin-bottom: 40px;
 }
-.contact-header h1 {
+
+.contact-header-section h1 {
   font-family: 'Cinzel', serif;
   font-size: 2.6rem;
   font-weight: 800;
   margin: 0 0 10px;
   color: #0f172a;
 }
-.contact-header p {
-  font-size: 1.05rem;
+
+.contact-header-section .header-subtitle {
+  font-size: 1.1rem;
   color: #475569;
   max-width: 600px;
   margin: 0 auto;
   font-weight: 500;
 }
-.divider {
-  width: 50px;
-  height: 3px;
-  background-color: #16a34a;
-  margin: 24px auto 0;
-  border-radius: 2px;
-}
 
-/* Layout Grid */
-.contact-layout-grid {
-  display: grid;
-  grid-template-columns: 35% 1fr;
-  gap: 30px;
-  align-items: start;
-}
-
-/* Mountain Photo Styles */
-.mountain-photo {
-  margin-bottom: 24px;
-  border-radius: 16px;
-  overflow: hidden;
-  border: 3px solid #0f172a;
-  box-shadow: 0 12px 24px -8px rgba(0, 0, 0, 0.15);
-  transition: transform 0.3s ease;
-}
-
-.mountain-photo:hover {
-  transform: translateY(-4px);
-}
-
-.seraj-valley-img {
-  width: 100%;
-  height: auto;
-  display: block;
-  object-fit: cover;
-  aspect-ratio: 16 / 10;
-}
-
-.photo-caption {
-  background: #0f172a;
-  color: #ffffff;
-  padding: 10px 12px;
-  font-size: 0.8rem;
-  text-align: center;
-  font-weight: 500;
-  letter-spacing: 0.3px;
-}
-
-.photo-caption span {
-  margin-right: 6px;
-}
-
-/* Cards */
-.info-card, .form-card {
+/* Form Section */
+.contact-form-section {
   background-color: #ffffff;
-  border: 2px solid #0f172a;
-  border-radius: 12px;
-  padding: 32px;
-  box-shadow: 0 10px 25px -5px rgba(0,0,0,0.02);
+  border-radius: 20px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+  border: 1px solid #f0f0f0;
 }
 
-.info-card h3, .form-card h3 {
+.form-container {
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 40px;
+}
+
+.form-header {
+  text-align: center;
+  margin-bottom: 30px;
+}
+
+.form-header h2 {
   font-family: 'Cinzel', serif;
-  font-size: 1.4rem;
+  font-size: 2rem;
   font-weight: 800;
-  margin: 0 0 8px;
+  margin: 0 0 10px;
   color: #0f172a;
 }
 
-/* Info Pane Details */
-.info-subtext {
-  font-size: 0.9rem;
+.form-header .form-description {
+  font-size: 1.1rem;
   color: #64748b;
-  margin: 0 0 24px;
-  font-weight: 500;
 }
-.contact-methods {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-.method-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 14px;
-}
-.method-icon {
-  font-size: 1.5rem;
-  background: #f8fafc;
-  border: 1px solid #cbd5e1;
+
+/* Status Messages */
+.status-message {
+  padding: 16px 20px;
   border-radius: 8px;
-  width: 44px;
-  height: 44px;
+  margin-bottom: 24px;
+  font-weight: 600;
+  font-size: 0.95rem;
   display: flex;
   align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
+  gap: 8px;
 }
-.method-row strong {
-  font-size: 0.95rem;
-  font-weight: 800;
-  color: #0f172a;
-  display: block;
-  margin-bottom: 2px;
+
+.status-message.success {
+  background-color: #f0fdf4;
+  border: 1px solid bb f7d0;
+  color: #15803d;
 }
-.method-row p {
-  margin: 0;
-  font-size: 0.9rem;
-  color: #475569;
-  line-height: 1.5;
-}
-.timing-note {
-  font-size: 0.8rem !important;
-  color: #16a34a !important;
-  font-weight: 700;
-  margin-top: 4px !important;
+
+.status-message.error {
+  background-color: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #dc2626;
 }
 
 /* Form Styles */
-.pahadse-form {
-  margin-top: 24px;
+.contact-form {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 24px;
 }
+
 .form-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 16px;
-}
-.input-field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.full-width {
-  margin-top: 8px;
-}
-.input-field label {
-  font-size: 0.85rem;
-  font-weight: 800;
-  text-transform: uppercase;
-  color: #475569;
-  letter-spacing: 0.5px;
-}
-.core-input {
-  padding: 12px 14px;
-  border: 2px solid #cbd5e1;
-  border-radius: 8px;
-  font-size: 0.95rem;
-  font-family: inherit;
-  color: #0f172a;
-  background-color: #f8fafc;
-  outline: none;
-  font-weight: 500;
-  transition: border-color 0.2s;
-}
-.core-input:focus {
-  border-color: #16a34a;
-  background-color: #ffffff;
-}
-.textarea {
-  resize: vertical;
-  min-height: 120px;
+  gap: 20px;
+  margin-bottom: 16px;
 }
 
-/* Button */
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.form-group.full-width {
+  grid-column: 1 / -1;
+}
+
+.form-label {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #374151;
+  margin-bottom: 4px;
+}
+
+.form-input {
+  padding: 14px 16px;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-family: inherit;
+  color: #111827;
+  background-color: #f9fafb;
+  transition: all 0.2s ease;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: #10b981;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+  background-color: #ffffff;
+}
+
+.form-input.is-invalid {
+  border-color: #ef4444;
+  background-color: #fef2f2;
+}
+
+.textarea {
+  resize: vertical;
+  min-height: 140px;
+  font-family: inherit;
+}
+
+/* Button Styles */
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
 .submit-btn {
   background-color: #0f172a;
   color: #ffffff;
   border: none;
-  padding: 16px 24px;
-  border-radius: 30px;
-  font-size: 0.95rem;
-  font-weight: 800;
+  padding: 14px 28px;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 700;
   cursor: pointer;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  margin-top: 10px;
-  transition: background-color 0.2s;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
-.submit-btn:hover {
-  background-color: #16a34a;
+
+.submit-btn:hover:not(:disabled) {
+  background-color: #10b981;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
 }
+
 .submit-btn:disabled {
-  opacity: 0.7;
+  opacity: 0.6;
   cursor: not-allowed;
+  transform: none;
 }
 
-/* Feedback Banners */
-.success-banner {
-  background-color: #f0fdf4;
-  border: 2px solid #bbf7d0;
-  color: #15803d;
-  padding: 14px;
-  border-radius: 8px;
-  font-weight: 700;
-  font-size: 0.9rem;
-  margin-top: 16px;
-}
-.error-banner {
-  background-color: #fef2f2;
-  border: 2px solid #fecaca;
-  color: #dc2626;
-  padding: 14px;
-  border-radius: 8px;
-  font-weight: 700;
-  font-size: 0.9rem;
-  margin-top: 16px;
-}
-
-/* Responsiveness */
-@media (max-width: 900px) {
-  .contact-layout-grid {
-    grid-template-columns: 1fr;
+/* Responsive Design */
+@media (max-width: 768px) {
+  .contact-page-wrapper {
+    padding: calc(90px + 20px) 4% 40px;
   }
+
+  .form-container {
+    padding: 24px;
+  }
+
+  .contact-header-section h1 {
+    font-size: 2rem;
+  }
+
+  .contact-header-section .header-subtitle {
+    font-size: 1rem;
+  }
+
+  .form-header h2 {
+    font-size: 1.75rem;
+  }
+
   .form-grid {
     grid-template-columns: 1fr;
   }
-  
-  .mountain-photo {
-    max-width: 400px;
-    margin-left: auto;
-    margin-right: auto;
+
+  .form-group.full-width {
+    grid-column: 1;
+  }
+}
+
+@media (max-width: 480px) {
+  .contact-page-wrapper {
+    padding: calc(90px + 16px) 3% 30px;
+  }
+
+  .contact-header-section h1 {
+    font-size: 1.75rem;
+  }
+
+  .contact-header-section .header-subtitle {
+    font-size: 0.95rem;
+  }
+
+  .form-header h2 {
+    font-size: 1.5rem;
+  }
+
+  .form-input {
+    padding: 12px 14px;
+    font-size: 0.95rem;
+  }
+
+  .submit-btn {
+    padding: 12px 24px;
+    font-size: 0.95rem;
+    width: 100%;
+    justify-content: center;
   }
 }
 </style>
