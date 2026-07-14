@@ -21,7 +21,6 @@ const errorMessage = ref('')
 
 // Submission Handler
 const handleContactSubmit = async () => {
-  // Basic validation
   if (!formData.value.name || !formData.value.email || !formData.value.query) {
     errorMessage.value = "Please fill in your name, email, and query."
     return
@@ -55,99 +54,99 @@ const handleContactSubmit = async () => {
 </script>
 
 <template>
-  <div class="contact-page-wrapper">
-    <!-- Header Section -->
-    <section class="contact-header-section">
-      <div class="header-content">
-        <h1>Get in Touch</h1>
-        <p class="header-subtitle">We're here to help with any questions about our Himalayan products, orders, or general inquiries.</p>
-      </div>
-    </section>
+  <div class="contact-page-wrapper fade-in">
+    <div class="contact-container">
+      
+      <!-- ─── HEADER ─── -->
+      <section class="contact-header">
+        <h1 class="page-title">Get in Touch</h1>
+        <p class="page-subtitle">We're here to help with any questions about our Himalayan products, orders, or general inquiries.</p>
+      </section>
 
-    <!-- Main Contact Form Section -->
-    <section class="contact-form-section">
-      <div class="form-container">
-        <div class="form-header">
-          <h2>Send Us a Message</h2>
-          <p class="form-description">Fill out the form below and we'll get back to you shortly.</p>
-        </div>
-
+      <!-- ─── FORM SECTION ─── -->
+      <section class="contact-form-section">
+        
         <!-- Status Messages -->
-        <div v-if="successMessage" class="status-message success">
-          ✓ {{ successMessage }}
-        </div>
-        <div v-if="errorMessage" class="status-message error">
-          {{ errorMessage }}
-        </div>
+        <transition name="fade">
+          <div v-if="successMessage" class="status-message success">
+            <span class="status-icon">✓</span> {{ successMessage }}
+          </div>
+        </transition>
+        <transition name="fade">
+          <div v-if="errorMessage" class="status-message error">
+            <span class="status-icon">⚠</span> {{ errorMessage }}
+          </div>
+        </transition>
 
         <!-- Contact Form -->
-        <form @submit.prevent="handleContactSubmit" class="contact-form">
+        <form @submit.prevent="handleContactSubmit" class="clean-form">
           <div class="form-grid">
+            
             <!-- Name Field -->
-            <div class="form-group">
-              <label for="name" class="form-label">Full Name *</label>
+            <div class="field">
+              <label for="name">Full Name <span class="required">*</span></label>
               <input
                 id="name"
                 ref="name"
                 v-model="formData.name"
                 type="text"
-                placeholder="Enter your full name"
-                class="form-input"
+                placeholder="John Doe"
+                class="clean-input"
                 :class="{ 'is-invalid': !formData.name && isSubmitting }"
                 @blur="!formData.name && $refs.name.focus()"
               />
             </div>
 
             <!-- Email Field -->
-            <div class="form-group">
-              <label for="email" class="form-label">Email Address *</label>
+            <div class="field">
+              <label for="email">Email Address <span class="required">*</span></label>
               <input
                 id="email"
                 ref="email"
                 v-model="formData.email"
                 type="email"
-                placeholder="your.email@example.com"
-                class="form-input"
+                placeholder="hello@example.com"
+                class="clean-input"
                 :class="{ 'is-invalid': !formData.email && isSubmitting }"
                 @blur="!formData.email && $refs.email.focus()"
               />
             </div>
 
             <!-- Phone Field -->
-            <div class="form-group">
-              <label for="phone" class="form-label">Phone Number (Optional)</label>
+            <div class="field">
+              <label for="phone">Phone Number</label>
               <input
                 id="phone"
                 v-model="formData.phone"
                 type="tel"
-                placeholder="+91 XXXXXXXXXX"
-                class="form-input"
+                placeholder="10-digit mobile number"
+                class="clean-input"
               />
             </div>
 
             <!-- Subject Field -->
-            <div class="form-group">
-              <label for="subject" class="form-label">Subject</label>
+            <div class="field">
+              <label for="subject">Subject</label>
               <input
                 id="subject"
                 ref="subject"
                 v-model="formData.subject"
                 type="text"
                 placeholder="What is this regarding?"
-                class="form-input"
+                class="clean-input"
               />
             </div>
 
             <!-- Message Field -->
-            <div class="form-group full-width">
-              <label for="query" class="form-label">Your Message *</label>
+            <div class="field full-width">
+              <label for="query">Your Message <span class="required">*</span></label>
               <textarea
                 id="query"
                 ref="query"
                 v-model="formData.query"
-                rows="6"
-                placeholder="Please describe your inquiry in detail..."
-                class="form-input textarea"
+                rows="5"
+                placeholder="How can we help you today?"
+                class="clean-input textarea"
                 :class="{ 'is-invalid': !formData.query && isSubmitting }"
                 @blur="!formData.query && $refs.query.focus()"
               />
@@ -156,115 +155,92 @@ const handleContactSubmit = async () => {
 
           <!-- Submit Button -->
           <div class="form-actions">
-            <button
-              type="submit"
-              class="submit-btn primary"
-              :disabled="isSubmitting"
-            >
-              {{ isSubmitting ? 'Sending Your Message...' : 'Send Message' }}
+            <button type="submit" class="primary-cta" :disabled="isSubmitting">
+              {{ isSubmitting ? 'Sending...' : 'Send Message' }}
             </button>
           </div>
         </form>
-      </div>
-    </section>
+      </section>
 
-    <!-- Optional: Contact Info Section (Removed as requested) -->
-    <!-- The "home card" (sidebar with mountain photo and contact info) has been removed per request -->
+    </div>
   </div>
 </template>
 
 <style scoped>
-/* Base Page Styling */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+/* ─── BASE STYLES ─── */
+.fade-in { animation: fIn 0.4s ease-out; }
+@keyframes fIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+
 .contact-page-wrapper {
-  background-color: #FAF6F0; /* PahadS Brand Background */
+  background-color: #ffffff; /* Pure white background */
   min-height: 100vh;
-  padding: calc(90px + 40px) 4% 60px;
+  padding: 100px 24px 80px;
   box-sizing: border-box;
-  font-family: 'Jost', system-ui, sans-serif;
-  color: #0f172a;
+  font-family: 'Inter', -apple-system, sans-serif;
+  color: #111827;
 }
 
-/* Header Section */
-.contact-header-section {
-  text-align: center;
-  margin-bottom: 40px;
-}
-
-.contact-header-section h1 {
-  font-family: 'Cinzel', serif;
-  font-size: 2.6rem;
-  font-weight: 800;
-  margin: 0 0 10px;
-  color: #0f172a;
-}
-
-.contact-header-section .header-subtitle {
-  font-size: 1.1rem;
-  color: #475569;
-  max-width: 600px;
+.contact-container {
+  max-width: 700px; /* Constrained width for a premium form feel */
   margin: 0 auto;
-  font-weight: 500;
 }
 
-/* Form Section */
-.contact-form-section {
-  background-color: #ffffff;
-  border-radius: 20px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
-  overflow: hidden;
-  border: 1px solid #f0f0f0;
-}
-
-.form-container {
-  max-width: 600px;
-  margin: 0 auto;
-  padding: 40px;
-}
-
-.form-header {
+/* ─── HEADER ─── */
+.contact-header {
   text-align: center;
-  margin-bottom: 30px;
+  margin-bottom: 48px;
 }
 
-.form-header h2 {
-  font-family: 'Cinzel', serif;
-  font-size: 2rem;
-  font-weight: 800;
-  margin: 0 0 10px;
-  color: #0f172a;
+.page-title {
+  font-size: 36px;
+  font-weight: 700;
+  margin: 0 0 16px;
+  color: #111827;
+  letter-spacing: -1px;
 }
 
-.form-header .form-description {
-  font-size: 1.1rem;
-  color: #64748b;
+.page-subtitle {
+  font-size: 16px;
+  color: #6B7280;
+  max-width: 500px;
+  margin: 0 auto;
+  line-height: 1.6;
 }
 
-/* Status Messages */
+/* ─── STATUS MESSAGES ─── */
 .status-message {
   padding: 16px 20px;
-  border-radius: 8px;
-  margin-bottom: 24px;
-  font-weight: 600;
-  font-size: 0.95rem;
+  border-radius: 12px;
+  margin-bottom: 32px;
+  font-weight: 500;
+  font-size: 14px;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
+}
+
+.status-icon {
+  font-weight: 800;
+  font-size: 16px;
 }
 
 .status-message.success {
-  background-color: #f0fdf4;
-  border: 1px solid bb f7d0;
-  color: #15803d;
+  background-color: #DCFCE7;
+  color: #15803D;
 }
 
 .status-message.error {
-  background-color: #fef2f2;
-  border: 1px solid #fecaca;
-  color: #dc2626;
+  background-color: #FEE2E2;
+  color: #DC2626;
 }
 
-/* Form Styles */
-.contact-form {
+.fade-enter-active, .fade-leave-active { transition: opacity 0.3s ease; }
+.fade-enter-from, .fade-leave-to { opacity: 0; }
+
+/* ─── FORM STYLES (Borderless & Soft) ─── */
+.clean-form {
   display: flex;
   flex-direction: column;
   gap: 24px;
@@ -273,150 +249,132 @@ const handleContactSubmit = async () => {
 .form-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 20px;
-  margin-bottom: 16px;
+  gap: 24px 20px;
 }
 
-.form-group {
+.field {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-.form-group.full-width {
+.field.full-width {
   grid-column: 1 / -1;
 }
 
-.form-label {
-  font-size: 0.95rem;
-  font-weight: 700;
-  color: #374151;
-  margin-bottom: 4px;
+.field label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #4B5563;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
-.form-input {
-  padding: 14px 16px;
-  border: 2px solid #e5e7eb;
-  border-radius: 8px;
-  font-size: 1rem;
+.required {
+  color: #EF4444;
+}
+
+/* The Borderless Input */
+.clean-input {
+  padding: 16px 20px;
+  background-color: #F3F4F6; /* Soft gray background */
+  border: 1px solid transparent; /* No harsh borders */
+  border-radius: 16px;
+  font-size: 15px;
   font-family: inherit;
   color: #111827;
-  background-color: #f9fafb;
   transition: all 0.2s ease;
+  box-sizing: border-box;
+  width: 100%;
 }
 
-.form-input:focus {
+.clean-input::placeholder {
+  color: #9CA3AF;
+}
+
+.clean-input:focus {
   outline: none;
-  border-color: #10b981;
-  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
   background-color: #ffffff;
+  border-color: #111827; /* Sleek black outline only on focus */
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
 }
 
-.form-input.is-invalid {
-  border-color: #ef4444;
-  background-color: #fef2f2;
+.clean-input.is-invalid {
+  background-color: #FEF2F2;
+  border-color: #FCA5A5;
+  color: #DC2626;
 }
 
 .textarea {
   resize: vertical;
   min-height: 140px;
-  font-family: inherit;
 }
 
-/* Button Styles */
+/* ─── BUTTON ─── */
 .form-actions {
   display: flex;
   justify-content: flex-end;
-  margin-top: 8px;
+  margin-top: 16px;
 }
 
-.submit-btn {
-  background-color: #0f172a;
+.primary-cta {
+  background-color: #111827;
   color: #ffffff;
   border: none;
-  padding: 14px 28px;
-  border-radius: 8px;
-  font-size: 1rem;
-  font-weight: 700;
+  padding: 18px 36px;
+  border-radius: 16px;
+  font-size: 16px;
+  font-weight: 600;
   cursor: pointer;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
   transition: all 0.2s ease;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
+  width: 100%;
+  font-family: inherit;
 }
 
-.submit-btn:hover:not(:disabled) {
-  background-color: #10b981;
+.primary-cta:hover:not(:disabled) {
+  background-color: #374151;
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
 }
 
-.submit-btn:disabled {
-  opacity: 0.6;
+.primary-cta:disabled {
+  background-color: #E5E7EB;
+  color: #9CA3AF;
   cursor: not-allowed;
-  transform: none;
 }
 
-/* Responsive Design */
+/* ─── RESPONSIVE ─── */
 @media (max-width: 768px) {
   .contact-page-wrapper {
-    padding: calc(90px + 20px) 4% 40px;
+    padding: 80px 16px 80px; /* Account for mobile navbars */
   }
 
-  .form-container {
-    padding: 24px;
+  .page-title {
+    font-size: 28px;
   }
 
-  .contact-header-section h1 {
-    font-size: 2rem;
+  .page-subtitle {
+    font-size: 15px;
   }
 
-  .contact-header-section .header-subtitle {
-    font-size: 1rem;
-  }
-
-  .form-header h2 {
-    font-size: 1.75rem;
+  .contact-header {
+    margin-bottom: 32px;
   }
 
   .form-grid {
     grid-template-columns: 1fr;
+    gap: 20px;
   }
 
-  .form-group.full-width {
+  .field.full-width {
     grid-column: 1;
   }
-}
 
-@media (max-width: 480px) {
-  .contact-page-wrapper {
-    padding: calc(90px + 16px) 3% 30px;
+  .clean-input {
+    padding: 14px 16px;
   }
 
-  .contact-header-section h1 {
-    font-size: 1.75rem;
-  }
-
-  .contact-header-section .header-subtitle {
-    font-size: 0.95rem;
-  }
-
-  .form-header h2 {
-    font-size: 1.5rem;
-  }
-
-  .form-input {
-    padding: 12px 14px;
-    font-size: 0.95rem;
-  }
-
-  .submit-btn {
-    padding: 12px 24px;
-    font-size: 0.95rem;
-    width: 100%;
-    justify-content: center;
+  .primary-cta {
+    padding: 16px;
   }
 }
 </style>

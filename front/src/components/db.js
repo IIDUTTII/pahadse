@@ -33,6 +33,8 @@ const _configCacheTtlMs = 5 * 60 * 1000
 let _gatewayConfigCachedAt = 0
 let _shippingConfigCachedAt = 0
 
+
+export { db, auth, storage }
 export const ORDER_STATUS_FLOW = ['pending', 'confirmed', 'shipped', 'delivered']
 export const ORDER_TERMINAL_STATUSES = ['rejected', 'cancelled']
 
@@ -81,6 +83,54 @@ export async function logProductView(productId) {
     })
   } catch (e) {
     console.warn('logProductView failed silently:', e.message)
+  }
+}
+
+
+/**
+ * ─────────────────────────────────────────────────────────────────────────────
+ * CMS Configuration Fetchers (Landing, About, Auth)
+ * Add these to your db.js file
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+export async function fetchAuthConfig() {
+  try {
+    const snap = await getDoc(doc(db, 'systemConfig', 'authPages'))
+    if (snap.exists()) return snap.data()
+    // Fallback defaults
+    return {
+      loginBg: 'https://firebasestorage.googleapis.com/v0/b/pahadse-13309.firebasestorage.app/o/other%2Funnamed.jpg?alt=media&token=2a8a1cdf-09e6-4d4f-a92b-3879d4a4c3a6',
+      registerBg: 'https://firebasestorage.googleapis.com/v0/b/pahadse-13309.firebasestorage.app/o/other%2Funnamed%20(11).jpg?alt=media&token=6d7b1ada-9ac9-4749-b8e3-c434da20c984'
+    }
+  } catch (e) {
+    console.error('Fetch Auth Config Error:', e)
+    return { loginBg: '', registerBg: '' }
+  }
+}
+
+export async function fetchAboutConfig() {
+  try {
+    const snap = await getDoc(doc(db, 'aboutConfig', 'main'))
+    if (snap.exists()) return snap.data()
+    // Fallback defaults matching your original layout
+    return {
+      images: {
+        hero: 'https://firebasestorage.googleapis.com/v0/b/pahadse-13309.firebasestorage.app/o/contact%2Fhero2.jpg?alt=media&token=ff12c12e-3078-411a-bc76-f36b6928eaf1',
+        village: 'https://firebasestorage.googleapis.com/v0/b/pahadse-13309.firebasestorage.app/o/contact%2Fvillage-women.jpg?alt=media&token=2b210d97-e255-499f-a4ab-98f6f67da6bc',
+        family: 'https://firebasestorage.googleapis.com/v0/b/pahadse-13309.firebasestorage.app/o/contact%2Fvillage.jpg?alt=media&token=87f75b78-6bc9-40b0-965a-09efd60260d4',
+        valley: 'https://images.pexels.com/photos/3057904/pexels-photo-3057904.jpeg',
+        founder: 'https://firebasestorage.googleapis.com/v0/b/pahadse-13309.firebasestorage.app/o/contact%2Ffounder.jpg?alt=media&token=afb61aba-bbba-4974-a4d2-4416332d01db'
+      },
+      text: {
+        heroTitle: 'Life in the Himalayas',
+        section1Body: 'The Himalayan region is known for its pristine environment, traditional lifestyles, and rich agricultural heritage. For us, the mountains are not just where we live—they are the very essence of who we are.',
+        section2Body: 'PahadS is more than a storefront; it is a bridge connecting you directly to the authentic mountain families of Himachal Pradesh.',
+        founderQuote: '"I don\'t own farms or produce everything myself. What I do have is deep respect for the mountain families I grew up around. PahadS is my effort to bring their honest work to people who will appreciate it."'
+      }
+    }
+  } catch (e) {
+    console.error('Fetch About Config Error:', e)
+    return null
   }
 }
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1791,22 +1841,7 @@ export async function deleteLandingImage(fileUrl) {
   }
 }
 
-/**
- * Fetch About Page configuration
- * Config is stored in 'aboutConfig' collection with docId 'main'
- */
-export async function fetchAboutConfig() {
-  try {
-    const snap = await getDoc(doc(db, 'aboutConfig', 'main'))
-    if (snap.exists()) {
-      return snap.data()
-    }
-    return getDefaultAboutConfig()
-  } catch (e) {
-    console.error('fetchAboutConfig error:', e)
-    return getDefaultAboutConfig()
-  }
-}
+
 
 /**
  * Default About Page configuration matching about.vue structure
