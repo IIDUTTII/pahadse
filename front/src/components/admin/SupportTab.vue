@@ -102,10 +102,7 @@ const formatTime = (ts) => {
 }
 
 const selectedQuery = ref(null)
-
-const openQueryDetail = (q) => {
-  selectedQuery.value = q
-}
+const openQueryDetail = (q) => { selectedQuery.value = q }
 
 const formatQueryText = (text) => {
   if (!text) return ''
@@ -115,235 +112,340 @@ const formatQueryText = (text) => {
 
 <template>
   <div class="support-container fade-in">
-    <div class="tab-content-area">
-      <div class="sub-tab-bar">
-        <button :class="['sub-tab-btn', { active: activeSubTab === 'chats' }]" @click="activeSubTab = 'chats'">
-          User Chats
-        </button>
-        <button :class="['sub-tab-btn', { active: activeSubTab === 'queries' }]" @click="activeSubTab = 'queries'">
-          Contact Queries
-          <span class="tab-count warn">{{ pendingQueryCount }}</span>
-        </button>
-      </div>
-
-      <div v-if="activeSubTab === 'chats'" class="chat-shell fade-in">
-        <div class="thread-list">
-          <div class="thread-list-head">Active Client Sessions</div>
-          <div v-if="supportThreads.length === 0" class="thread-empty">No active chats yet.</div>
-          <div v-for="t in supportThreads" :key="t.userId"
-               :class="['thread-item', { selected: selectedChatUserId === t.userId }]"
-               @click="selectedChatUserId = t.userId">
-            <div class="thread-name">{{ t.userName || 'Pahari User' }}</div>
-            <div class="thread-uid">ID: {{ t.userId.substring(0, 8) }}…</div>
-          </div>
-        </div>
-
-        <div class="chat-window">
-          <div v-if="!selectedChatUserId" class="chat-placeholder">
-            <p>Select a conversation from the sidebar.</p>
-          </div>
-          <template v-else>
-            <div class="chat-messages">
-              <div v-for="(msg, i) in activeChatDoc?.messages || []" :key="i"
-                   :class="['bubble-wrap', msg.role === 'admin' ? 'mine' : 'theirs']">
-                <div class="bubble-meta">{{ msg.role === 'admin' ? 'You (Admin)' : activeChatDoc?.userName }} · {{ formatTime(msg.timestamp) }}</div>
-                <div :class="['bubble', msg.role === 'admin' ? 'bubble-admin' : 'bubble-user']">{{ msg.text }}</div>
-              </div>
-            </div>
-            <div class="chat-input-bar">
-              <input v-model="adminChatText" class="chat-input" placeholder="Type your reply..." @keyup.enter="sendAdminReply" />
-              <button class="btn-send" :disabled="chatSending" @click="sendAdminReply">{{ chatSending ? '...' : 'Send' }}</button>
-            </div>
-          </template>
-        </div>
-      </div>
-
-      <div v-if="activeSubTab === 'queries'" class="queries-shell fade-in">
-        <div class="q-tools">
-          <input v-model="searchQueries" class="q-search" placeholder="Search name, email, query…" />
-          <select v-model="statusFilter" class="q-select">
-            <option value="all">All Queries</option>
-            <option value="pending">Pending</option>
-            <option value="resolved">Resolved</option>
-          </select>
-        </div>
-
-        <div v-if="queryError" class="q-error">{{ queryError }}</div>
-        <div v-else-if="loadingQueries && queries.length === 0" class="q-empty">Loading queries…</div>
-        <div v-else-if="filteredQueries.length === 0" class="q-empty">No queries found. Submissions from the public Contact page appear here (not in User Chats).</div>
-
-        <div v-else class="q-table-shell">
-          <table class="q-table">
-            <thead>
-              <tr>
-                <th>Sender</th>
-                <th>Subject</th>
-                <th>Source</th>
-                <th>Status</th>
-                <th>Received</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="q in filteredQueries" :key="q.id" @click="openQueryDetail(q)" class="q-row-clickable">
-                <td>
-                  <strong>{{ q.name || 'Anonymous' }}</strong>
-                  <span>{{ q.email }}</span>
-                  <span v-if="q.phone">{{ q.phone }}</span>
-                </td>
-                <td>{{ q.subject || '-' }}</td>
-                <td><span class="source-pill">{{ q.source || 'contact' }}</span></td>
-                <td>
-                  <span class="q-pill" :class="q.status === 'resolved' ? 'ok' : 'wait'">{{ q.status || 'pending' }}</span>
-                </td>
-                <td>{{ formatTime(q.createdAt) }}</td>
-                <td>
-                  <div class="q-actions compact">
-                    <button v-if="q.status !== 'resolved'" class="q-btn-soft" @click.stop="changeQueryStatus(q.id, 'resolved')">Resolve</button>
-                    <button v-else class="q-btn-soft" @click.stop="changeQueryStatus(q.id, 'pending')">Reopen</button>
-                    <button class="q-btn-danger" @click.stop="removeQuery(q.id)">Delete</button>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-          <div class="q-load-more" v-if="queries.length >= queryLimit">
-            <button class="q-btn" @click="queryLimit += 10">Load 10 older queries</button>
-          </div>
-        </div>
-      </div>
-
-      <Teleport to="body">
-        <div v-if="selectedQuery" class="query-modal-overlay" @click.self="selectedQuery = null">
-          <div class="query-modal">
-            <div class="modal-header">
-              <h3>Contact Query Details</h3>
-              <button class="modal-close" @click="selectedQuery = null" aria-label="Close">×</button>
-            </div>
-            <div class="modal-body">
-              <div class="detail-row">
-                <label>Name</label>
-                <span>{{ selectedQuery.name || 'Anonymous' }}</span>
-              </div>
-              <div class="detail-row">
-                <label>Email</label>
-                <span>{{ selectedQuery.email }}</span>
-              </div>
-              <div class="detail-row" v-if="selectedQuery.phone">
-                <label>Phone</label>
-                <span>{{ selectedQuery.phone }}</span>
-              </div>
-              <div class="detail-row">
-                <label>Subject</label>
-                <span>{{ selectedQuery.subject || '—' }}</span>
-              </div>
-              <div class="detail-row">
-                <label>Source</label>
-                <span><span class="source-pill">{{ selectedQuery.source || 'contact' }}</span></span>
-              </div>
-              <div class="detail-row">
-                <label>Status</label>
-                <span><span class="q-pill" :class="selectedQuery.status === 'resolved' ? 'ok' : 'wait'">{{ selectedQuery.status || 'pending' }}</span></span>
-              </div>
-              <div class="detail-row">
-                <label>Received</label>
-                <span>{{ formatTime(selectedQuery.createdAt) }}</span>
-              </div>
-              <div class="detail-row full-width">
-                <label>Message</label>
-                <div class="query-message" v-html="formatQueryText(selectedQuery.query)"></div>
-              </div>
-            </div>
-            <div class="modal-footer">
-              <button class="q-btn-soft" @click="selectedQuery = null">Close</button>
-              <button v-if="selectedQuery.status !== 'resolved'" class="q-btn" @click="changeQueryStatus(selectedQuery.id, 'resolved'); selectedQuery = null">Mark Resolved</button>
-              <button v-else class="q-btn-soft" @click="changeQueryStatus(selectedQuery.id, 'pending'); selectedQuery = null">Reopen</button>
-              <button class="q-btn-danger" @click="removeQuery(selectedQuery.id); selectedQuery = null">Delete</button>
-            </div>
-          </div>
-        </div>
-      </Teleport>
+    
+    <!-- Minimalist Sub-Tab Navigation -->
+    <div class="clean-tabs-bar">
+      <button :class="['clean-tab', { active: activeSubTab === 'chats' }]" @click="activeSubTab = 'chats'">
+        User Chats
+      </button>
+      <button :class="['clean-tab', { active: activeSubTab === 'queries' }]" @click="activeSubTab = 'queries'">
+        Contact Queries
+        <span v-if="pendingQueryCount > 0" class="tab-badge">{{ pendingQueryCount }}</span>
+      </button>
     </div>
+
+    <!-- ─── USER CHATS INTERFACE ─── -->
+    <div v-if="activeSubTab === 'chats'" class="workspace-area chat-workspace fade-in">
+      
+      <!-- Independent Scroller: User List -->
+      <div class="thread-list-pane scroller">
+        <div class="pane-header">Active Sessions</div>
+        <div v-if="supportThreads.length === 0" class="empty-state">No active chats.</div>
+        
+        <div v-for="t in supportThreads" :key="t.userId"
+             :class="['user-thread-card', { active: selectedChatUserId === t.userId }]"
+             @click="selectedChatUserId = t.userId">
+          <div class="avatar-circle">{{ (t.userName || 'U')[0].toUpperCase() }}</div>
+          <div class="thread-info">
+            <span class="thread-name">{{ t.userName || 'Pahari User' }}</span>
+            <span class="thread-id">ID: {{ t.userId.substring(0, 8) }}…</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Independent Scroller: Chat Window -->
+      <div class="chat-window-pane">
+        <div v-if="!selectedChatUserId" class="empty-state fill-height">
+          <span class="icon">💬</span>
+          <p>Select a user from the list to start chatting.</p>
+        </div>
+        
+        <template v-else>
+          <div class="chat-header">
+            <strong>{{ activeChatDoc?.userName || 'Pahari User' }}</strong>
+            <span class="chat-id-tag">ID: {{ selectedChatUserId }}</span>
+          </div>
+
+          <div class="chat-messages-area scroller">
+            <div v-for="(msg, i) in activeChatDoc?.messages || []" :key="i"
+                 :class="['chat-bubble-wrapper', msg.role === 'admin' ? 'is-admin' : 'is-user']">
+              <span class="bubble-time">{{ formatTime(msg.timestamp) }}</span>
+              <div class="chat-bubble">{{ msg.text }}</div>
+            </div>
+          </div>
+
+          <div class="chat-input-area">
+            <input 
+              v-model="adminChatText" 
+              class="clean-input" 
+              placeholder="Type your reply..." 
+              @keyup.enter="sendAdminReply" 
+            />
+            <button class="btn-primary" :disabled="chatSending" @click="sendAdminReply">
+              {{ chatSending ? '...' : 'Send' }}
+            </button>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- ─── CONTACT QUERIES INTERFACE ─── -->
+    <div v-if="activeSubTab === 'queries'" class="workspace-area queries-workspace fade-in">
+      
+      <!-- Filters -->
+      <div class="filter-bar">
+        <input v-model="searchQueries" class="clean-input search-box" placeholder="Search name, email, or query..." />
+        <select v-model="statusFilter" class="clean-input filter-box">
+          <option value="all">All Queries</option>
+          <option value="pending">Pending</option>
+          <option value="resolved">Resolved</option>
+        </select>
+      </div>
+
+      <div v-if="queryError" class="alert-box error">{{ queryError }}</div>
+      <div v-else-if="loadingQueries && queries.length === 0" class="empty-state">Loading queries…</div>
+      <div v-else-if="filteredQueries.length === 0" class="empty-state">No queries match your criteria.</div>
+
+      <!-- Independent Scroller: Table Area -->
+      <div v-else class="table-container scroller">
+        <table class="clean-table">
+          <thead>
+            <tr>
+              <th>Sender Info</th>
+              <th>Subject</th>
+              <th>Status</th>
+              <th>Date Received</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="q in filteredQueries" :key="q.id" @click="openQueryDetail(q)" class="clickable-row">
+              <td>
+                <div class="sender-info">
+                  <span class="sender-name">{{ q.name || 'Anonymous' }}</span>
+                  <span class="sender-meta">{{ q.email }} <template v-if="q.phone">• {{ q.phone }}</template></span>
+                </div>
+              </td>
+              <td><span class="subject-text">{{ q.subject || 'No Subject' }}</span></td>
+              <td>
+                <span class="status-dot-pill" :class="q.status === 'resolved' ? 'resolved' : 'pending'">
+                  <i class="dot"></i> {{ q.status || 'pending' }}
+                </span>
+              </td>
+              <td class="date-text">{{ formatTime(q.createdAt) }}</td>
+              <td>
+                <div class="action-buttons">
+                  <button v-if="q.status !== 'resolved'" class="btn-text" @click.stop="changeQueryStatus(q.id, 'resolved')">Resolve</button>
+                  <button v-else class="btn-text" @click.stop="changeQueryStatus(q.id, 'pending')">Reopen</button>
+                  <button class="btn-text danger" @click.stop="removeQuery(q.id)">Delete</button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        
+        <div class="load-more-row" v-if="queries.length >= queryLimit">
+          <button class="btn-outline" @click="queryLimit += 10">Load More Queries</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── QUERY MODAL ─── -->
+    <Teleport to="body">
+      <Transition name="fade">
+        <div v-if="selectedQuery" class="modal-overlay" @click.self="selectedQuery = null">
+          <div class="clean-modal">
+            <div class="modal-header">
+              <h3>Query Details</h3>
+              <button class="btn-close" @click="selectedQuery = null">✕</button>
+            </div>
+            
+            <div class="modal-content scroller">
+              <div class="info-grid">
+                <div class="info-group">
+                  <label>Name</label>
+                  <p>{{ selectedQuery.name || 'Anonymous' }}</p>
+                </div>
+                <div class="info-group">
+                  <label>Email</label>
+                  <p>{{ selectedQuery.email }}</p>
+                </div>
+                <div class="info-group" v-if="selectedQuery.phone">
+                  <label>Phone</label>
+                  <p>{{ selectedQuery.phone }}</p>
+                </div>
+                <div class="info-group">
+                  <label>Date Received</label>
+                  <p>{{ formatTime(selectedQuery.createdAt) }}</p>
+                </div>
+                <div class="info-group">
+                  <label>Status</label>
+                  <p>
+                    <span class="status-dot-pill" :class="selectedQuery.status === 'resolved' ? 'resolved' : 'pending'">
+                      <i class="dot"></i> {{ selectedQuery.status || 'pending' }}
+                    </span>
+                  </p>
+                </div>
+                <div class="info-group">
+                  <label>Source</label>
+                  <p class="source-tag">{{ selectedQuery.source || 'contact' }}</p>
+                </div>
+              </div>
+
+              <div class="message-block">
+                <label>Message / Query</label>
+                <div class="message-content" v-html="formatQueryText(selectedQuery.query)"></div>
+              </div>
+            </div>
+            
+            <div class="modal-footer">
+              <button class="btn-outline" @click="selectedQuery = null">Close</button>
+              <button v-if="selectedQuery.status !== 'resolved'" class="btn-primary" @click="changeQueryStatus(selectedQuery.id, 'resolved'); selectedQuery = null">Mark as Resolved</button>
+              <button v-else class="btn-outline" @click="changeQueryStatus(selectedQuery.id, 'pending'); selectedQuery = null">Reopen Query</button>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
   </div>
 </template>
 
 <style scoped>
-.support-container { display: flex; flex-direction: column; height: calc(100vh - 120px); }
-.sub-tab-bar { display: flex; gap: 6px; padding: 12px 16px 8px; border-bottom: 1px solid #E2E8F0; background: #F8FAFC; }
-.sub-tab-btn { background: transparent; border: none; padding: 8px 16px; border-radius: 8px; font-weight: 700; color: #475569; cursor: pointer; transition: all 0.15s; font-size: 0.85rem; }
-.sub-tab-btn:hover { background: #E2E8F0; }
-.sub-tab-btn.active { background: #FFFFFF; color: #0F2A1F; box-shadow: 0 2px 6px rgba(0,0,0,0.05); }
-.tab-content-area { flex: 1; background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 0 0 8px 8px; overflow: hidden; display: flex; flex-direction: column; }
-.chat-shell { display: flex; height: 100%; flex: 1; }
-.thread-list { width: 300px; border-right: 1px solid #E2E8F0; display: flex; flex-direction: column; background: #F8FAFC; overflow-y: auto; }
-.thread-list-head { padding: 16px; font-size: 0.75rem; font-weight: 800; text-transform: uppercase; border-bottom: 1px solid #E2E8F0; color: #64748B; background: #FFFFFF; }
-.thread-empty { padding: 20px; text-align: center; color: #64748B; font-size: 0.85rem; }
-.thread-item { padding: 16px; border-bottom: 1px solid #E2E8F0; cursor: pointer; transition: background 0.15s; }
-.thread-item:hover { background: #F1F5F9; }
-.thread-item.selected { background: #ECFDF5; border-left: 4px solid #15803D; }
-.thread-name { font-weight: 800; font-size: 0.95rem; color: #0F172A; }
-.thread-uid { font-size: 0.75rem; color: #64748B; margin-top: 4px; font-family: monospace; }
-.chat-window { flex: 1; display: flex; flex-direction: column; background: #FFFFFF; }
-.chat-placeholder { flex: 1; display: flex; align-items: center; justify-content: center; color: #94A3B8; font-weight: 600; }
-.chat-messages { flex: 1; padding: 24px; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; background: #FAFAF9; }
-.bubble-wrap { display: flex; flex-direction: column; max-width: 75%; }
-.bubble-wrap.mine { align-self: flex-end; align-items: flex-end; }
-.bubble-wrap.theirs { align-self: flex-start; align-items: flex-start; }
-.bubble-meta { font-size: 0.7rem; color: #64748B; font-weight: 700; margin-bottom: 4px; }
-.bubble { padding: 12px 16px; border-radius: 8px; font-size: 0.95rem; line-height: 1.5; font-weight: 500; }
-.bubble-admin { background: #0F2A1F; color: #FFFFFF; border-radius: 12px 12px 2px 12px; }
-.bubble-user { background: #FFFFFF; color: #0F172A; border: 1px solid #CBD5E1; border-radius: 12px 12px 12px 2px; }
-.chat-input-bar { padding: 16px; border-top: 1px solid #E2E8F0; display: flex; gap: 10px; background: #FFFFFF; }
-.chat-input { flex: 1; padding: 12px 16px; border: 2px solid #CBD5E1; border-radius: 8px; font-size: 0.95rem; outline: none; font-family: inherit; }
-.chat-input:focus { border-color: #0F2A1F; }
-.btn-send { background: #0F2A1F; color: white; border: none; padding: 12px 24px; border-radius: 8px; font-weight: 800; cursor: pointer; }
-.queries-shell { padding: 16px 20px; overflow-y: auto; height: 100%; box-sizing: border-box; }
-.q-tools { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 16px; }
-.q-search, .q-select { border: 1px solid #E5E7EB; border-radius: 8px; padding: 10px 12px; background: #FFF; outline: none; }
-.q-search { flex: 1; min-width: 250px; }
-.q-error { background: #FEF2F2; border: 1px solid #FECACA; color: #B91C1C; padding: 12px; border-radius: 8px; font-weight: 700; margin-bottom: 12px; font-size: 0.85rem; }
-.q-empty { padding: 32px 16px; text-align: center; color: #64748B; font-weight: 600; background: #F8FAFC; border: 1px dashed #CBD5E1; border-radius: 8px; font-size: 0.85rem; }
-.q-table-shell { border: 1px solid #E5E7EB; border-radius: 8px; overflow-x: auto; background: #FFFFFF; }
-.q-table { width: 100%; border-collapse: collapse; min-width: 1200px; table-layout: fixed; }
-.q-table th { text-align: left; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em; color: #64748B; background: #F8FAFC; padding: 10px 12px; border-bottom: 1px solid #E5E7EB; }
-.q-table td { padding: 10px 12px; border-bottom: 1px solid #F1F5F9; color: #334155; vertical-align: top; font-size: 0.8rem; word-wrap: break-word; overflow-wrap: break-word; }
-.q-table td strong { display: block; color: #0F172A; font-weight: 800; }
-.q-table td span { display: block; margin-top: 3px; color: #64748B; font-size: 0.75rem; }
-.query-cell { max-width: 450px; white-space: normal; word-wrap: break-word; overflow-wrap: break-word; line-height: 1.5; }
-.source-pill { display: inline-flex; padding: 3px 8px; border-radius: 999px; background: #F1F5F9; font-size: 0.7rem; font-weight: 800; text-transform: uppercase; }
-.q-pill { display: inline-flex; padding: 3px 8px; border-radius: 999px; font-size: 0.7rem; font-weight: 800; text-transform: uppercase; }
-.q-pill.wait { background: #FEF3C7; color: #92400E; }
-.q-pill.ok { background: #DCFCE7; color: #15803D; }
-.q-actions.compact { display: flex; gap: 6px; flex-wrap: wrap; }
-.q-load-more { display: flex; justify-content: center; padding: 12px; }
-.q-btn { background: #0F2A1F; color: white; border: none; padding: 8px 16px; border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 0.8rem; }
-.query-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: flex; align-items: center; justify-content: center; z-index: 2000; padding: 20px; animation: fIn 0.2s ease-out; }
-.query-modal { background: #FFFFFF; border-radius: 12px; max-width: 640px; width: 100%; max-height: 85vh; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); animation: popIn 0.25s cubic-bezier(0.16,1,0.3,1); }
-@keyframes popIn { from { opacity: 0; transform: scale(0.95) translateY(10px); } to { opacity: 1; transform: none; } }
-.query-modal .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid #E2E8F0; background: #F8FAFC; }
-.query-modal .modal-header h3 { margin: 0; font-size: 1.1rem; font-weight: 800; color: #0F172A; }
-.query-modal .modal-close { background: none; border: none; font-size: 1.5rem; color: #64748B; cursor: pointer; padding: 0 8px; line-height: 1; }
-.query-modal .modal-close:hover { color: #0F172A; }
-.query-modal .modal-body { padding: 20px; overflow-y: auto; }
-.query-modal .detail-row { display: grid; grid-template-columns: 140px 1fr; gap: 12px 16px; padding: 10px 0; border-bottom: 1px solid #F1F5F9; align-items: start; }
-.query-modal .detail-row.full-width { grid-template-columns: 1fr; gap: 6px; }
-.query-modal .detail-row:last-child { border-bottom: none; }
-.query-modal .detail-row label { font-size: 0.75rem; font-weight: 800; text-transform: uppercase; color: #64748B; letter-spacing: 0.04em; }
-.query-modal .detail-row span { color: #0F172A; font-size: 0.9rem; line-height: 1.5; word-wrap: break-word; }
-.query-modal .query-message { background: #FAFAF9; border: 1px solid #E2E8F0; border-radius: 8px; padding: 16px; font-size: 0.95rem; line-height: 1.6; color: #1E1E1E; white-space: pre-wrap; }
-.query-modal .query-message p { margin: 0 0 0.75em; }
-.query-modal .query-message p:last-child { margin-bottom: 0; }
-.query-modal .modal-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 16px 20px; border-top: 1px solid #E2E8F0; background: #F8FAFC; flex-wrap: wrap; }
-@media (max-width: 640px) {
-  .query-modal .detail-row { grid-template-columns: 1fr; gap: 4px; }
-  .query-modal .detail-row label { font-size: 0.7rem; }
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+/* ─── BASE TOKENS & ANIMATIONS ─── */
+.support-container { 
+  display: flex; 
+  flex-direction: column; 
+  height: calc(100vh - 150px); /* Locks container to screen height to enable internal scrolling */
+  font-family: 'Inter', sans-serif;
+  color: #111827;
 }
-.q-btn-soft { background: #F1F5F9; color: #0F172A; border: 1px solid #CBD5E1; border-radius: 6px; padding: 5px 10px; font-weight: 700; cursor: pointer; font-size: 0.75rem; }
-.q-btn-danger { background: #FEF2F2; color: #DC2626; border: 1px solid #FECACA; border-radius: 6px; padding: 5px 10px; font-weight: 700; cursor: pointer; font-size: 0.75rem; }
-.fade-in { animation: fIn 0.3s ease-out; }
-@keyframes fIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
-@media (max-width: 768px) {
-  .chat-shell { flex-direction: column; }
-  .thread-list { width: 100%; height: 180px; border-right: none; border-bottom: 1px solid #E2E8F0; }
+
+.fade-in { animation: fadeIn 0.3s ease; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+/* Custom Sleek Scrollbar */
+.scroller { overflow-y: auto; }
+.scroller::-webkit-scrollbar { width: 6px; height: 6px; }
+.scroller::-webkit-scrollbar-track { background: transparent; }
+.scroller::-webkit-scrollbar-thumb { background: #D1D5DB; border-radius: 10px; }
+.scroller::-webkit-scrollbar-thumb:hover { background: #9CA3AF; }
+
+/* ─── TAB NAVIGATION ─── */
+.clean-tabs-bar { display: flex; gap: 32px; border-bottom: 1px solid #E5E7EB; margin-bottom: 24px; }
+.clean-tab { background: transparent; border: none; padding: 0 0 16px 0; font-size: 15px; font-weight: 500; color: #6B7280; cursor: pointer; display: flex; align-items: center; gap: 8px; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: color 0.2s; font-family: inherit;}
+.clean-tab:hover { color: #111827; }
+.clean-tab.active { color: #111827; font-weight: 600; border-bottom-color: #111827; }
+.tab-badge { background: #EF4444; color: #ffffff; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 20px; }
+
+/* ─── COMMON WORKSPACE ─── */
+.workspace-area { flex: 1; display: flex; min-height: 0; background: #ffffff; border: 1px solid #E5E7EB; border-radius: 16px; overflow: hidden; }
+.empty-state { text-align: center; padding: 40px 20px; color: #6B7280; font-size: 14px; font-weight: 500; }
+.empty-state.fill-height { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; }
+.empty-state .icon { font-size: 32px; margin-bottom: 12px; opacity: 0.5; }
+
+/* ─── CHAT INTERFACE ─── */
+.chat-workspace { flex-direction: row; }
+
+/* Left Pane: User List */
+.thread-list-pane { width: 320px; border-right: 1px solid #E5E7EB; background: #F9FAFB; display: flex; flex-direction: column; }
+.pane-header { padding: 20px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #6B7280; border-bottom: 1px solid #E5E7EB; position: sticky; top: 0; background: #F9FAFB; z-index: 2;}
+.user-thread-card { padding: 16px 20px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #E5E7EB; cursor: pointer; transition: background 0.2s; }
+.user-thread-card:hover { background: #F3F4F6; }
+.user-thread-card.active { background: #ffffff; border-left: 3px solid #111827; }
+.avatar-circle { width: 36px; height: 36px; border-radius: 50%; background: #E5E7EB; color: #4B5563; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; flex-shrink: 0;}
+.user-thread-card.active .avatar-circle { background: #111827; color: #ffffff; }
+.thread-info { display: flex; flex-direction: column; gap: 4px; overflow: hidden; }
+.thread-name { font-size: 14px; font-weight: 600; color: #111827; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.thread-id { font-size: 11px; color: #9CA3AF; font-family: monospace; }
+
+/* Right Pane: Chat Window */
+.chat-window-pane { flex: 1; display: flex; flex-direction: column; min-width: 0; background: #ffffff; }
+.chat-header { padding: 20px 24px; border-bottom: 1px solid #E5E7EB; display: flex; align-items: center; justify-content: space-between; font-size: 15px; color: #111827; }
+.chat-id-tag { font-size: 12px; color: #6B7280; font-family: monospace; background: #F3F4F6; padding: 4px 8px; border-radius: 6px; }
+
+.chat-messages-area { flex: 1; padding: 24px; display: flex; flex-direction: column; gap: 16px; background: #ffffff; }
+.chat-bubble-wrapper { display: flex; flex-direction: column; max-width: 70%; }
+.chat-bubble-wrapper.is-user { align-self: flex-start; align-items: flex-start; }
+.chat-bubble-wrapper.is-admin { align-self: flex-end; align-items: flex-end; }
+
+.bubble-time { font-size: 11px; color: #9CA3AF; margin-bottom: 6px; }
+.chat-bubble { padding: 14px 18px; font-size: 14px; line-height: 1.5; font-weight: 500; }
+.is-user .chat-bubble { background: #F3F4F6; color: #111827; border-radius: 16px 16px 16px 4px; }
+.is-admin .chat-bubble { background: #111827; color: #ffffff; border-radius: 16px 16px 4px 16px; }
+
+.chat-input-area { padding: 20px 24px; border-top: 1px solid #E5E7EB; display: flex; gap: 12px; background: #ffffff; }
+
+/* ─── QUERIES INTERFACE ─── */
+.queries-workspace { flex-direction: column; padding: 24px; background: #ffffff; border: none; }
+.filter-bar { display: flex; gap: 16px; margin-bottom: 24px; }
+.search-box { flex: 1; max-width: 400px; }
+.filter-box { width: 160px; }
+
+.table-container { border: 1px solid #E5E7EB; border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; }
+.clean-table { width: 100%; border-collapse: collapse; text-align: left; }
+.clean-table th { padding: 16px 20px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #6B7280; border-bottom: 1px solid #E5E7EB; background: #F9FAFB; }
+.clean-table td { padding: 20px; border-bottom: 1px solid #F3F4F6; vertical-align: top; }
+.clickable-row { cursor: pointer; transition: background 0.2s; }
+.clickable-row:hover { background: #F9FAFB; }
+
+.sender-info { display: flex; flex-direction: column; gap: 4px; }
+.sender-name { font-size: 14px; font-weight: 600; color: #111827; }
+.sender-meta { font-size: 12px; color: #6B7280; }
+.subject-text { font-size: 14px; font-weight: 500; color: #111827; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.date-text { font-size: 13px; color: #6B7280; }
+
+.status-dot-pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; color: #4B5563; text-transform: capitalize; }
+.status-dot-pill .dot { width: 8px; height: 8px; border-radius: 50%; background: #D1D5DB; }
+.status-dot-pill.resolved .dot { background: #10B981; }
+.status-dot-pill.pending .dot { background: #F59E0B; }
+
+.action-buttons { display: flex; gap: 16px; }
+
+.load-more-row { padding: 16px; text-align: center; border-top: 1px solid #E5E7EB; background: #F9FAFB; }
+
+/* ─── FORMS & BUTTONS ─── */
+.clean-input { padding: 12px 16px; background: #F9FAFB; border: 1px solid #E5E7EB; border-radius: 8px; font-size: 14px; font-family: inherit; color: #111827; outline: none; transition: 0.2s; }
+.clean-input:focus { background: #ffffff; border-color: #111827; }
+
+.btn-primary { background: #111827; color: #fff; border: none; padding: 12px 24px; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; transition: 0.2s; font-family: inherit;}
+.btn-primary:hover:not(:disabled) { background: #374151; }
+.btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.btn-outline { background: #ffffff; color: #111827; border: 1px solid #D1D5DB; padding: 10px 20px; border-radius: 8px; font-weight: 600; font-size: 13px; cursor: pointer; transition: 0.2s; font-family: inherit;}
+.btn-outline:hover { background: #F9FAFB; border-color: #111827; }
+
+.btn-text { background: transparent; border: none; color: #4B5563; font-size: 13px; font-weight: 600; cursor: pointer; transition: 0.2s; padding: 0; font-family: inherit;}
+.btn-text:hover { color: #111827; text-decoration: underline; }
+.btn-text.danger:hover { color: #DC2626; }
+
+.alert-box { padding: 14px 16px; border-radius: 8px; font-size: 14px; font-weight: 500; margin-bottom: 24px; }
+.alert-box.error { background: #FEE2E2; color: #DC2626; }
+
+/* ─── MODAL ─── */
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.2); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 20px; }
+.clean-modal { background: #ffffff; border-radius: 20px; width: 100%; max-width: 600px; max-height: 85vh; display: flex; flex-direction: column; box-shadow: 0 20px 40px rgba(0,0,0,0.1); }
+.modal-header { padding: 24px; border-bottom: 1px solid #E5E7EB; display: flex; justify-content: space-between; align-items: center; }
+.modal-header h3 { margin: 0; font-size: 18px; font-weight: 600; color: #111827; }
+.btn-close { background: transparent; border: none; font-size: 20px; color: #6B7280; cursor: pointer; transition: 0.2s; }
+.btn-close:hover { color: #111827; }
+
+.modal-content { padding: 24px; overflow-y: auto; }
+.info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 32px; }
+.info-group label { display: block; font-size: 12px; font-weight: 600; color: #6B7280; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+.info-group p { margin: 0; font-size: 15px; color: #111827; font-weight: 500; }
+.source-tag { display: inline-block; background: #F3F4F6; padding: 4px 10px; border-radius: 6px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;}
+
+.message-block label { display: block; font-size: 12px; font-weight: 600; color: #6B7280; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; }
+.message-content { background: #F9FAFB; padding: 20px; border-radius: 12px; font-size: 15px; line-height: 1.6; color: #374151; white-space: pre-wrap; }
+
+.modal-footer { padding: 24px; border-top: 1px solid #E5E7EB; display: flex; justify-content: flex-end; gap: 12px; background: #F9FAFB; border-radius: 0 0 20px 20px; }
+
+/* ─── RESPONSIVE ─── */
+@media (max-width: 900px) {
+  .support-container { height: auto; min-height: 100vh; }
+  .chat-workspace { flex-direction: column; }
+  .thread-list-pane { width: 100%; border-right: none; border-bottom: 1px solid #E5E7EB; max-height: 250px; }
+  .chat-window-pane { min-height: 500px; }
+}
+@media (max-width: 600px) {
+  .queries-workspace { padding: 16px; border: none; border-radius: 0;}
+  .filter-bar { flex-direction: column; }
+  .search-box, .filter-box { max-width: 100%; width: 100%; }
+  .action-buttons { flex-direction: column; gap: 8px; align-items: flex-start; }
+  .info-grid { grid-template-columns: 1fr; gap: 16px; }
+  .modal-footer { flex-direction: column; }
+  .modal-footer button { width: 100%; }
 }
 </style>

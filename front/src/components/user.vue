@@ -192,52 +192,26 @@ const getInitials = (name) => {
 
 <template>
   <div class="user-page">
-    <div v-if="initializing" class="loading">
+    <div v-if="initializing" class="center-state">
       <div class="spinner"></div>
       <p>Loading account…</p>
     </div>
 
-    <div v-else-if="user" class="dashboard">
-      <!-- Header -->
-      <header class="dashboard-header">
-        <div class="header-content">
-          <div class="title-group">
-            <h1 class="page-title">Account</h1>
-            <p class="page-subtitle">Manage your profile, addresses & support</p>
-          </div>
-          <div class="user-badge">
-            <div class="avatar-wrapper">
-              <img
-                v-if="user.photoURL"
-                :src="user.photoURL"
-                class="avatar"
-                alt="Profile"
-              />
-              <div v-else class="avatar-placeholder">
-                {{ getInitials(user.displayName || 'User') }}
-              </div>
-              <label class="avatar-upload" @click="$refs.avatarInput?.click()">
-                <span v-html="icons.camera"></span>
-                <input ref="avatarInput" type="file" accept="image/*" @change="uploadAvatar" :disabled="isUploading" hidden />
-              </label>
-            </div>
-          </div>
-        </div>
-        <div class="user-meta">
-          <span class="name">{{ user.displayName || 'User' }}</span>
-          <span class="email">{{ user.email }}</span>
-        </div>
+    <div v-else-if="user" class="account-container fade-in">
+      
+      <!-- Minimal Page Header -->
+      <header class="page-header">
+        <h1 class="page-title">My Account</h1>
       </header>
 
-      <!-- Navigation Tabs -->
-      <nav class="segmented-tabs" role="tablist" aria-label="Account sections">
+      <!-- Sleek, Borderless Tabs -->
+      <nav class="clean-tabs-bar" role="tablist">
         <button
           v-for="view in views"
           :key="view.id"
-          :class="['tab', { active: activeView === view.id }]"
+          :class="['clean-tab', { active: activeView === view.id }]"
           @click="activeView = view.id"
           role="tab"
-          :aria-selected="activeView === view.id"
         >
           <span class="tab-icon" v-html="icons[view.icon]"></span>
           {{ view.label }}
@@ -245,168 +219,111 @@ const getInitials = (name) => {
       </nav>
 
       <!-- Content Panels -->
-      <main class="content">
-        <!-- Profile View -->
-        <section v-if="activeView === 'profile'" class="view profile-view" role="tabpanel">
-          <!-- Profile Hero -->
+      <main class="tab-content-area">
+        
+        <!-- ─── PROFILE VIEW ─── -->
+        <section v-if="activeView === 'profile'" class="view-panel profile-view">
+          
           <div class="profile-hero">
-            <div class="profile-avatar-wrapper">
-              <img
-                v-if="user.photoURL"
-                :src="user.photoURL"
-                class="profile-avatar"
-                alt="Profile"
-              />
-              <div v-else class="profile-avatar-placeholder">
-                {{ getInitials(user.displayName || 'User') }}
-              </div>
-              <label class="profile-avatar-upload" @click="$refs.profileAvatarInput?.click()" aria-label="Change profile photo">
+            <div class="avatar-wrapper">
+              <img v-if="user.photoURL" :src="user.photoURL" class="avatar-img" alt="Profile" />
+              <div v-else class="avatar-placeholder">{{ getInitials(user.displayName || 'User') }}</div>
+              
+              <label class="avatar-upload-btn" @click="$refs.avatarInput?.click()" aria-label="Change photo">
                 <span v-html="icons.camera"></span>
-                <input ref="profileAvatarInput" type="file" accept="image/*" @change="uploadAvatar" :disabled="isUploading" hidden />
+                <input ref="avatarInput" type="file" accept="image/*" @change="uploadAvatar" :disabled="isUploading" hidden />
               </label>
             </div>
             <h2 class="profile-name">{{ user.displayName || 'Your Name' }}</h2>
             <p class="profile-email">{{ user.email }}</p>
           </div>
 
-          <div class="card">
-            <div class="card-header">
-              <h2>Personal Info</h2>
-            </div>
-
-            <div class="field-group">
-              <div class="field">
-                <label>Display Name</label>
-                <div class="field-display" v-if="!isEditingName">
-                  <span class="field-value">{{ user.displayName || 'Not set' }}</span>
-                  <button class="icon-btn" @click="isEditingName = true" aria-label="Edit name">
-                    <span v-html="icons.edit"></span>
+          <div class="details-section">
+            <h3 class="section-label">Personal Information</h3>
+            
+            <div class="minimal-field">
+              <label>Display Name</label>
+              <div v-if="!isEditingName" class="field-row">
+                <span class="field-text">{{ user.displayName || 'Not set' }}</span>
+                <button class="icon-action-btn" @click="isEditingName = true"><span v-html="icons.edit"></span></button>
+              </div>
+              <div v-else class="field-edit-row">
+                <input v-model="displayName" class="clean-input" placeholder="Your name" @keyup.enter="saveProfile" autofocus />
+                <div class="edit-actions">
+                  <button class="btn-text" @click="isEditingName = false">Cancel</button>
+                  <button class="btn-primary-small" @click="saveProfile" :disabled="isUploading || !displayName.trim()">
+                    {{ isUploading ? 'Saving…' : 'Save' }}
                   </button>
                 </div>
-                <div v-else class="field-edit">
-                  <input
-                    v-model="displayName"
-                    class="input"
-                    placeholder="Your name"
-                    @keyup.enter="saveProfile"
-                    autofocus
-                  />
-                  <div class="field-actions">
-                    <button class="btn ghost" @click="isEditingName = false">
-                      <span v-html="icons.close"></span> Cancel
-                    </button>
-                    <button class="btn primary" @click="saveProfile" :disabled="isUploading || !displayName.trim()">
-                      <span v-html="icons.check" v-if="!isUploading"></span>
-                      <span class="spinner-sm" v-else></span>
-                      {{ isUploading ? 'Saving…' : 'Save' }}
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <div class="field">
-                <label>Email</label>
-                <span class="field-static">{{ user.email }}</span>
-                <span class="field-hint">Email cannot be changed</span>
               </div>
             </div>
 
-            <div class="card-divider"></div>
+            <div class="minimal-field">
+              <label>Registered Email</label>
+              <div class="field-row">
+                <span class="field-text disabled-text">{{ user.email }}</span>
+              </div>
+              <span class="field-hint">Email cannot be changed</span>
+            </div>
+          </div>
 
-            <!-- Danger Zone -->
-            <div class="danger-zone">
-              <h3>Danger Zone</h3>
-              <button class="btn danger logout-btn" @click="logout">
-                <span v-html="icons.logout"></span>
-                Log Out
-              </button>
+          <div class="danger-zone">
+            <button class="btn-logout" @click="logout">
+              <span v-html="icons.logout"></span> Log Out
+            </button>
+          </div>
+        </section>
+
+        <!-- ─── ADDRESSES VIEW ─── -->
+        <section v-else-if="activeView === 'addresses'" class="view-panel addresses-view">
+          
+          <div class="section-header-row">
+            <h3 class="section-label">Saved Addresses</h3>
+            <button class="btn-text-primary" @click="showAddressForm = true; editingAddressId = null; addressForm = { label: 'Home', fullName: '', phone: '', streetAddress: '', city: '', state: 'Himachal Pradesh', pincode: '' }">
+              + Add New
+            </button>
+          </div>
+
+          <div v-if="!userProfileDoc?.addresses?.length" class="empty-state">
+            <span v-html="icons['map-pin']" class="empty-icon"></span>
+            <h4>No addresses saved</h4>
+            <p>Add an address for faster checkout.</p>
+          </div>
+
+          <div v-else class="addresses-grid">
+            <div v-for="addr in userProfileDoc.addresses" :key="addr.id" class="address-card">
+              <div class="addr-header">
+                <span class="addr-badge">{{ addr.label }}</span>
+                <div class="addr-actions">
+                  <button @click="editAddress(addr)" class="icon-action-btn"><span v-html="icons.edit"></span></button>
+                  <button @click="deleteAddress(addr.id)" class="icon-action-btn danger"><span v-html="icons.trash"></span></button>
+                </div>
+              </div>
+              <h4 class="addr-name">{{ addr.fullName }}</h4>
+              <p class="addr-detail">{{ addr.streetAddress }}, {{ addr.city }}, {{ addr.state }} - {{ addr.pincode }}</p>
+              <span class="addr-phone">Phone: {{ addr.phone }}</span>
             </div>
           </div>
         </section>
 
-        <!-- Addresses View -->
-        <section v-else-if="activeView === 'addresses'" class="view addresses-view" role="tabpanel">
-          <div class="card">
-            <div class="card-header">
-              <h2>Saved Addresses</h2>
-              <button class="btn primary" @click="showAddressForm = true; editingAddressId = null; addressForm = { label: 'Home', fullName: '', phone: '', streetAddress: '', city: '', state: 'Himachal Pradesh', pincode: '' }">
-                <span v-html="icons.plus"></span>
-                Add Address
-              </button>
-            </div>
-
-            <div v-if="!userProfileDoc?.addresses?.length" class="empty-state">
-              <span v-html="icons['map-pin']" class="empty-icon"></span>
-              <h3>No addresses saved</h3>
-              <p>Add your first address to speed up checkout</p>
-              <button class="btn primary" @click="showAddressForm = true; editingAddressId = null; addressForm = { label: 'Home', fullName: '', phone: '', streetAddress: '', city: '', state: 'Himachal Pradesh', pincode: '' }">
-                <span v-html="icons.plus"></span>
-                Add Address
-              </button>
-            </div>
-
-            <div v-else class="addresses-grid">
-              <div v-for="addr in userProfileDoc.addresses" :key="addr.id" class="address-card">
-                <div class="addr-header">
-                  <span class="badge">{{ addr.label }}</span>
-                  <div class="addr-actions">
-                    <button @click="editAddress(addr)" class="icon-btn" aria-label="Edit address">
-                      <span v-html="icons.edit"></span>
-                    </button>
-                    <button @click="deleteAddress(addr.id)" class="icon-btn danger" aria-label="Delete address">
-                      <span v-html="icons.trash"></span>
-                    </button>
-                  </div>
-                </div>
-                <h3 class="addr-name">{{ addr.fullName }}</h3>
-                <p class="addr-detail">{{ addr.streetAddress }}, {{ addr.city }}, {{ addr.state }} - {{ addr.pincode }}</p>
-                <span class="addr-phone">
-                  <span v-html="icons['message-circle']" class="phone-icon"></span>
-                  {{ addr.phone }}
-                </span>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <!-- Support View -->
-        <section v-else-if="activeView === 'support'" class="view support-view" role="tabpanel">
-          <div class="card chat-card">
-            <div class="card-header">
-              <h2>Support Chat</h2>
-            </div>
-
+        <!-- ─── SUPPORT CHAT VIEW ─── -->
+        <section v-else-if="activeView === 'support'" class="view-panel support-view">
+          <div class="chat-viewport">
             <div class="chat-messages">
-              <div v-if="!supportMessages.length" class="empty-chat">
-                <span v-html="icons['message-circle']" class="chat-icon"></span>
-                <h3>No messages yet</h3>
-                <p>Start a conversation with our support team</p>
+              <div v-if="!supportMessages.length" class="empty-state">
+                <span v-html="icons['message-circle']" class="empty-icon"></span>
+                <h4>How can we help?</h4>
+                <p>Send us a message and we'll reply shortly.</p>
               </div>
-              <div
-                v-for="(msg, i) in supportMessages"
-                :key="i"
-                :class="['bubble', msg.role]"
-              >
-                <div class="bubble-meta">{{ msg.role === 'user' ? 'You' : 'Admin' }}</div>
+              <div v-for="(msg, i) in supportMessages" :key="i" :class="['chat-bubble', msg.role]">
                 <div class="bubble-text">{{ msg.text }}</div>
                 <div class="bubble-time">{{ new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }}</div>
               </div>
             </div>
 
-            <div class="chat-input">
-              <input
-                v-model="newMessage"
-                placeholder="Type a message…"
-                @keyup.enter="sendMessage"
-                class="chat-input-field"
-                aria-label="Message"
-              />
-              <button
-                class="btn primary chat-send"
-                @click="sendMessage"
-                :disabled="isSending || !newMessage.trim()"
-                aria-label="Send message"
-              >
+            <div class="chat-input-area">
+              <input v-model="newMessage" placeholder="Type a message…" @keyup.enter="sendMessage" class="clean-chat-input" />
+              <button class="chat-send-btn" @click="sendMessage" :disabled="isSending || !newMessage.trim()">
                 <span v-html="icons.send" v-if="!isSending"></span>
                 <span class="spinner-sm" v-else></span>
               </button>
@@ -416,74 +333,52 @@ const getInitials = (name) => {
       </main>
     </div>
 
-    <!-- Address Modal -->
-    <transition name="modal">
+    <!-- ─── ADDRESS MODAL (Bottom Sheet on Mobile) ─── -->
+    <transition name="sheet">
       <div v-if="showAddressForm" class="modal-overlay" @click.self="closeAddressForm">
-        <div class="modal" @click.stop>
+        <div class="modal-sheet">
           <div class="modal-header">
-            <h3>{{ editingAddressId ? 'Edit Address' : 'Add New Address' }}</h3>
-            <button class="icon-btn" @click="closeAddressForm" aria-label="Close">
-              <span v-html="icons.close"></span>
-            </button>
+            <h3>{{ editingAddressId ? 'Edit Address' : 'New Address' }}</h3>
+            <button class="icon-action-btn" @click="closeAddressForm"><span v-html="icons.close"></span></button>
           </div>
           <form @submit.prevent="saveAddress" class="modal-form">
-            <div class="form-row">
+            <div class="form-grid">
               <div class="field">
-                <label>Label <span class="required">*</span></label>
-                <select v-model="addressForm.label" class="input">
+                <label>Label</label>
+                <select v-model="addressForm.label" class="clean-input">
                   <option value="Home">Home</option>
                   <option value="Work">Work</option>
                   <option value="Other">Other</option>
                 </select>
               </div>
-            </div>
-            <div class="form-row">
               <div class="field">
-                <label>Full Name <span class="required">*</span></label>
-                <input v-model="addressForm.fullName" class="input" :class="{ error: addressErrors.fullName }" placeholder="John Doe" />
-                <span v-if="addressErrors.fullName" class="error-text">{{ addressErrors.fullName }}</span>
-              </div>
-            </div>
-            <div class="form-row">
-              <div class="field">
-                <label>Phone <span class="required">*</span></label>
-                <input v-model="addressForm.phone" class="input" :class="{ error: addressErrors.phone }" placeholder="9876543210" maxlength="10" @input="addressForm.phone = addressForm.phone.replace(/\D/g, '').slice(0, 10)" />
-                <span v-if="addressErrors.phone" class="error-text">{{ addressErrors.phone }}</span>
-              </div>
-            </div>
-            <div class="form-row">
-              <div class="field">
-                <label>Street Address <span class="required">*</span></label>
-                <input v-model="addressForm.streetAddress" class="input" :class="{ error: addressErrors.streetAddress }" placeholder="House/Flat No, Building, Street" />
-                <span v-if="addressErrors.streetAddress" class="error-text">{{ addressErrors.streetAddress }}</span>
-              </div>
-            </div>
-            <div class="form-row two-col">
-              <div class="field">
-                <label>City <span class="required">*</span></label>
-                <input v-model="addressForm.city" class="input" :class="{ error: addressErrors.city }" placeholder="City" />
-                <span v-if="addressErrors.city" class="error-text">{{ addressErrors.city }}</span>
+                <label>Full Name</label>
+                <input v-model="addressForm.fullName" class="clean-input" :class="{ error: addressErrors.fullName }" placeholder="John Doe" />
               </div>
               <div class="field">
-                <label>State <span class="required">*</span></label>
-                <input v-model="addressForm.state" class="input" placeholder="Himachal Pradesh" />
+                <label>Phone Number</label>
+                <input v-model="addressForm.phone" class="clean-input" :class="{ error: addressErrors.phone }" placeholder="10-digit mobile" maxlength="10" @input="addressForm.phone = addressForm.phone.replace(/\D/g, '').slice(0, 10)" />
               </div>
-            </div>
-            <div class="form-row">
+              <div class="field full-width">
+                <label>Complete Address</label>
+                <input v-model="addressForm.streetAddress" class="clean-input" :class="{ error: addressErrors.streetAddress }" placeholder="House/Flat No, Building, Street" />
+              </div>
               <div class="field">
-                <label>Pincode <span class="required">*</span></label>
-                <input v-model="addressForm.pincode" class="input" :class="{ error: addressErrors.pincode }" placeholder="123456" maxlength="6" @input="addressForm.pincode = addressForm.pincode.replace(/\D/g, '').slice(0, 6)" />
-                <span v-if="addressErrors.pincode" class="error-text">{{ addressErrors.pincode }}</span>
+                <label>City</label>
+                <input v-model="addressForm.city" class="clean-input" :class="{ error: addressErrors.city }" placeholder="City" />
+              </div>
+              <div class="field">
+                <label>State</label>
+                <input v-model="addressForm.state" class="clean-input disabled-text" readonly />
+              </div>
+              <div class="field">
+                <label>Pincode</label>
+                <input v-model="addressForm.pincode" class="clean-input" :class="{ error: addressErrors.pincode }" placeholder="6-digit code" maxlength="6" @input="addressForm.pincode = addressForm.pincode.replace(/\D/g, '').slice(0, 6)" />
               </div>
             </div>
             <div class="modal-actions">
-              <button type="button" class="btn ghost" @click="closeAddressForm">
-                <span v-html="icons.close"></span> Cancel
-              </button>
-              <button type="submit" class="btn primary" :disabled="isUploading">
-                <span v-html="icons.check" v-if="!isUploading"></span>
-                <span class="spinner-sm" v-else></span>
-                {{ editingAddressId ? 'Update' : 'Add' }}
+              <button type="submit" class="btn-primary-large" :disabled="isUploading">
+                {{ editingAddressId ? 'Update Address' : 'Save Address' }}
               </button>
             </div>
           </form>
@@ -494,747 +389,131 @@ const getInitials = (name) => {
 </template>
 
 <style scoped>
-/* ===== DESIGN TOKENS ===== */
-:root {
-  --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
-  --radius-full: 9999px;
-  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
-  --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.06);
-  --shadow-lg: 0 12px 32px rgba(15, 23, 42, 0.08);
-  --shadow-xl: 0 20px 48px rgba(15, 23, 42, 0.12);
-  --transition-fast: 120ms ease;
-  --transition-base: 200ms ease;
-  --focus-ring: 0 0 0 3px rgba(14, 165, 233, 0.4);
-}
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
-/* ===== BASE ===== */
-.user-page {
-  min-height: 100vh;
-  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
-  padding: 80px 20px 60px;
-  font-family: var(--font);
-  color: #0f172a;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
+/* ─── BASE STYLES ─── */
+.fade-in { animation: fIn 0.3s ease-out; }
+@keyframes fIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 
-/* ===== LOADING ===== */
-.loading {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 16px;
-  padding-top: 160px;
-  color: #64748b;
-}
-.spinner {
-  width: 40px;
-  height: 40px;
-  border: 3px solid #e2e8f0;
-  border-top-color: #0ea5e9;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
+.user-page { background: #ffffff; min-height: 100vh; padding: 100px 24px 80px; font-family: 'Inter', -apple-system, sans-serif; color: #111827; }
+.account-container { max-width: 768px; margin: 0 auto; width: 100%; }
+
+.center-state { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 50vh; color: #6B7280; }
+.spinner { width: 32px; height: 32px; border: 3px solid #F3F4F6; border-top-color: #111827; border-radius: 50%; animation: spin 0.8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* ===== DASHBOARD LAYOUT ===== */
-.dashboard {
-  max-width: 920px;
-  margin: 0 auto;
-  width: 100%;
-  box-sizing: border-box;
-  animation: fadeUp 0.4s var(--transition-base);
-}
-@keyframes fadeUp {
-  from { opacity: 0; transform: translateY(16px); }
-  to { opacity: 1; transform: translateY(0); }
-}
+/* ─── HEADER & TABS ─── */
+.page-header { margin-bottom: 32px; }
+.page-title { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -0.5px; }
 
-/* ===== HEADER ===== */
-.dashboard-header {
-  background: #ffffff;
-  border-radius: var(--radius-lg);
-  padding: 28px;
-  margin-bottom: 20px;
-  box-shadow: var(--shadow-md);
-  border: 1px solid #f1f5f9;
-  position: relative;
-  overflow: hidden;
-}
-.dashboard-header::before {
-  content: '';
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 3px;
-  background: linear-gradient(90deg, #0ea5e9, #10b981, #f59e0b);
-}
-.header-content {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-  flex-wrap: wrap;
-}
-.title-group { flex: 1; min-width: 200px; }
-.page-title {
-  font-size: 1.75rem;
-  font-weight: 800;
-  margin: 0 0 4px;
-  background: linear-gradient(135deg, #0f172a 0%, #334155 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-.page-subtitle {
-  font-size: 0.9rem;
-  color: #64748b;
-  margin: 0;
-  font-weight: 500;
-}
-.user-badge { flex-shrink: 0; }
-.avatar-wrapper {
-  position: relative;
-  width: 72px;
-  height: 72px;
-  border-radius: var(--radius-full);
-  cursor: pointer;
-  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
-}
-.avatar-wrapper:hover { transform: scale(1.03); box-shadow: var(--shadow-lg); }
-.avatar {
-  width: 100%;
-  height: 100%;
-  border-radius: var(--radius-full);
-  object-fit: cover;
-}
-.avatar-placeholder {
-  width: 100%;
-  height: 100%;
-  border-radius: var(--radius-full);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: #fff;
-}
-.avatar-upload {
-  position: absolute;
-  bottom: -2px;
-  right: -2px;
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-full);
-  background: #0f172a;
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  border: 3px solid #fff;
-  box-shadow: var(--shadow-md);
-  transition: transform var(--transition-fast), background var(--transition-fast);
-  opacity: 0.9;
-}
-.avatar-upload:hover { transform: scale(1.1); background: #1e293b; opacity: 1; }
-.avatar-upload:focus-visible { outline: none; box-shadow: var(--focus-ring); }
-.user-meta {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding-top: 20px;
-  border-top: 1px solid #f1f5f9;
-  width: 100%;
-}
-.user-meta .name {
-  font-size: 1.1rem;
-  font-weight: 700;
-}
-.user-meta .email {
-  font-size: 0.85rem;
-  color: #64748b;
-}
+.clean-tabs-bar { display: flex; gap: 32px; border-bottom: 1px solid #E5E7EB; margin-bottom: 32px; overflow-x: auto; white-space: nowrap; }
+.clean-tab { background: transparent; border: none; padding: 0 0 16px 0; font-size: 15px; font-weight: 500; color: #6B7280; cursor: pointer; display: flex; align-items: center; gap: 8px; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: color 0.2s; font-family: inherit;}
+.clean-tab:hover { color: #111827; }
+.clean-tab.active { color: #111827; font-weight: 600; border-bottom-color: #111827; }
+.tab-icon { display: flex; opacity: 0.8; }
+.clean-tab.active .tab-icon { opacity: 1; }
 
-/* ===== TABS ===== */
-.segmented-tabs {
-  display: flex;
-  gap: 4px;
-  background: #fff;
-  padding: 4px;
-  border-radius: var(--radius-md);
-  margin-bottom: 20px;
-  box-shadow: var(--shadow-sm);
-  border: 1px solid #f1f5f9;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-}
-.tab {
-  flex: 1;
-  min-width: 120px;
-  padding: 12px 16px;
-  border: none;
-  background: transparent;
-  border-radius: var(--radius-sm);
-  font-weight: 600;
-  font-size: 0.875rem;
-  color: #64748b;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  white-space: nowrap;
-}
-.tab:hover { background: #f8fafc; color: #0f172a; }
-.tab.active {
-  background: #0f172a;
-  color: #fff;
-  box-shadow: var(--shadow-sm);
-}
-.tab:focus-visible { outline: none; box-shadow: var(--focus-ring); }
-.tab-icon { display: flex; flex-shrink: 0; }
+.tab-content-area { width: 100%; }
 
-/* ===== CONTENT ===== */
-.content {
-  background: #fff;
-  border-radius: var(--radius-lg);
-  padding: 0;
-  box-shadow: var(--shadow-md);
-  border: 1px solid #f1f5f9;
-  overflow: hidden;
-}
-.view { padding: 28px; animation: fadeIn 0.25s var(--transition-base); }
-@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+/* ─── PROFILE VIEW ─── */
+.profile-hero { display: flex; flex-direction: column; align-items: center; text-align: center; margin-bottom: 48px; }
+.avatar-wrapper { position: relative; width: 100px; height: 100px; border-radius: 50%; margin-bottom: 16px; }
+.avatar-img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; background: #F3F4F6; }
+.avatar-placeholder { width: 100%; height: 100%; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 32px; font-weight: 600; background: #111827; color: #ffffff; }
+.avatar-upload-btn { position: absolute; bottom: 0; right: 0; width: 32px; height: 32px; border-radius: 50%; background: #ffffff; border: 1px solid #E5E7EB; color: #111827; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.05); transition: 0.2s; }
+.avatar-upload-btn:hover { background: #F9FAFB; transform: scale(1.05); }
 
-/* ===== CARDS ===== */
-.card {
-  background: transparent;
-  border: none;
-  box-shadow: none;
-}
-.card-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 24px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid #f1f5f9;
-}
-.card-header h2 {
-  font-size: 1.125rem;
-  font-weight: 700;
-  margin: 0;
-  color: #0f172a;
-}
+.profile-name { font-size: 24px; font-weight: 700; margin: 0 0 4px; letter-spacing: -0.3px;}
+.profile-email { font-size: 14px; color: #6B7280; margin: 0; }
 
-/* ===== FIELDS ===== */
-.field-group { margin-bottom: 8px; }
-.field { margin-bottom: 20px; }
-.field:last-child { margin-bottom: 0; }
-.field label {
-  display: block;
-  font-size: 0.7rem;
-  font-weight: 700;
-  color: #475569;
-  margin-bottom: 8px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-.required { color: #ef4444; margin-left: 2px; }
-.field-display {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 14px 16px;
-  background: #f8fafc;
-  border: 1px solid #f1f5f9;
-  border-radius: var(--radius-sm);
-  transition: border-color var(--transition-fast), background var(--transition-fast);
-}
-.field-display:hover { border-color: #e2e8f0; background: #f1f5f9; }
-.field-value {
-  font-size: 0.95rem;
-  color: #0f172a;
-  font-weight: 500;
-}
-.field-static {
-  display: block;
-  padding: 14px 16px;
-  background: #f8fafc;
-  border: 1px solid #f1f5f9;
-  border-radius: var(--radius-sm);
-  color: #0f172a;
-  font-size: 0.95rem;
-}
-.field-hint {
-  display: block;
-  font-size: 0.75rem;
-  color: #94a3b8;
-  margin-top: 6px;
-}
-.field-edit { display: flex; flex-direction: column; gap: 12px; }
-.field-actions { display: flex; gap: 10px; justify-content: flex-end; padding-top: 4px; }
+.details-section { margin-bottom: 48px; }
+.section-label { font-size: 14px; font-weight: 600; color: #111827; text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 24px; border-bottom: 1px solid #E5E7EB; padding-bottom: 12px;}
 
-/* ===== INPUTS ===== */
-.input {
-  width: 100%;
-  padding: 12px 14px;
-  border: 1px solid #d1d5db;
-  border-radius: var(--radius-sm);
-  font: inherit;
-  font-size: 0.95rem;
-  background: #fff;
-  color: #0f172a;
-  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
-  box-sizing: border-box;
-}
-.input:focus {
-  outline: none;
-  border-color: #0ea5e9;
-  box-shadow: var(--focus-ring);
-}
-.input.error { border-color: #ef4444; }
-.input.error:focus { box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.2); }
-.input::placeholder { color: #94a3b8; }
-.input:disabled { background: #f1f5f9; color: #64748b; cursor: not-allowed; }
-.error-text { display: block; font-size: 0.75rem; color: #ef4444; margin-top: 6px; }
+.minimal-field { margin-bottom: 24px; }
+.minimal-field label { display: block; font-size: 13px; font-weight: 500; color: #6B7280; margin-bottom: 8px; }
+.field-row { display: flex; justify-content: space-between; align-items: center; background: #F9FAFB; padding: 14px 16px; border-radius: 12px; }
+.field-text { font-size: 15px; font-weight: 500; color: #111827; }
+.disabled-text { color: #6B7280; }
+.field-hint { display: block; font-size: 12px; color: #9CA3AF; margin-top: 6px; padding-left: 4px; }
 
-/* ===== BUTTONS ===== */
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 10px 18px;
-  border: none;
-  border-radius: var(--radius-sm);
-  font-weight: 600;
-  font-size: 0.875rem;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  white-space: nowrap;
-}
-.btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn.primary {
-  background: #0f172a;
-  color: #fff;
-}
-.btn.primary:hover:not(:disabled) { background: #1e293b; }
-.btn.primary:focus-visible { outline: none; box-shadow: var(--focus-ring); }
-.btn.ghost {
-  background: transparent;
-  color: #475569;
-}
-.btn.ghost:hover:not(:disabled) { background: #f1f5f9; color: #0f172a; }
-.btn.danger {
-  background: #fee2e2;
-  color: #dc2626;
-  border: 1px solid #fecaca;
-}
-.btn.danger:hover:not(:disabled) { background: #fecaca; color: #b91c1c; }
-.icon-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  padding: 0;
-  border: none;
-  background: transparent;
-  border-radius: var(--radius-sm);
-  color: #64748b;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-.icon-btn:hover { background: #f1f5f9; color: #0f172a; }
-.icon-btn.danger:hover { background: #fee2e2; color: #dc2626; }
-.icon-btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
-.spinner-sm {
-  width: 16px;
-  height: 16px;
-  border: 2px solid currentColor;
-  border-top-color: transparent;
-  border-radius: 50%;
-  animation: spin 0.6s linear infinite;
-  opacity: 0.7;
-}
-.logout-btn { width: 100%; margin-top: 4px; }
+.field-edit-row { display: flex; flex-direction: column; gap: 12px; }
+.clean-input { width: 100%; padding: 14px 16px; background: #ffffff; border: 1px solid #E5E7EB; border-radius: 12px; font-size: 15px; font-family: inherit; color: #111827; box-sizing: border-box; transition: 0.2s;}
+.clean-input:focus { outline: none; border-color: #111827; }
+.clean-input.error { border-color: #EF4444; }
+.edit-actions { display: flex; justify-content: flex-end; gap: 12px; }
 
-/* ===== DANGER ZONE ===== */
-.danger-zone {
-  margin-top: 32px;
-  padding-top: 24px;
-  border-top: 1px solid #f1f5f9;
-}
-.danger-zone h3 {
-  font-size: 0.875rem;
-  font-weight: 700;
-  color: #64748b;
-  margin: 0 0 16px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
+/* Buttons */
+.btn-text { background: transparent; border: none; color: #6B7280; font-size: 14px; font-weight: 500; cursor: pointer; padding: 8px 16px; font-family: inherit;}
+.btn-text:hover { color: #111827; }
+.btn-primary-small { background: #111827; color: #ffffff; border: none; padding: 8px 20px; border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; font-family: inherit;}
+.btn-primary-large { background: #111827; color: #ffffff; border: none; padding: 16px; border-radius: 12px; font-size: 16px; font-weight: 600; cursor: pointer; width: 100%; font-family: inherit;}
+.btn-logout { background: #FEF2F2; color: #DC2626; border: none; padding: 14px; border-radius: 12px; font-size: 15px; font-weight: 600; cursor: pointer; width: 100%; display: flex; justify-content: center; align-items: center; gap: 8px; font-family: inherit; transition: 0.2s;}
+.btn-logout:hover { background: #FEE2E2; }
+.icon-action-btn { background: transparent; border: none; color: #6B7280; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: 0.2s; padding: 4px; border-radius: 6px; }
+.icon-action-btn:hover { background: #F3F4F6; color: #111827; }
+.icon-action-btn.danger:hover { color: #DC2626; background: #FEF2F2; }
 
-/* ===== ADDRESSES ===== */
-.addresses-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 16px;
-}
-.address-card {
-  background: #f8fafc;
-  border: 1px solid #f1f5f9;
-  border-radius: var(--radius-md);
-  padding: 20px;
-  transition: all var(--transition-base);
-  position: relative;
-}
-.address-card:hover {
-  border-color: #e2e8f0;
-  box-shadow: var(--shadow-md);
-  transform: translateY(-2px);
-}
-.addr-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 12px;
-}
-.badge {
-  background: #dcfce7;
-  color: #16a34a;
-  font-size: 0.65rem;
-  font-weight: 700;
-  padding: 4px 10px;
-  border-radius: var(--radius-full);
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
-}
-.addr-actions { display: flex; gap: 4px; }
-.addr-name {
-  font-size: 1rem;
-  font-weight: 700;
-  margin: 0 0 6px;
-  color: #0f172a;
-}
-.addr-detail {
-  font-size: 0.85rem;
-  color: #64748b;
-  margin: 0 0 8px;
-  line-height: 1.5;
-}
-.addr-phone {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.85rem;
-  color: #475569;
-  font-weight: 500;
-}
-.phone-icon { color: #0ea5e9; flex-shrink: 0; }
+/* ─── ADDRESSES VIEW ─── */
+.section-header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; border-bottom: 1px solid #E5E7EB; padding-bottom: 12px;}
+.section-header-row .section-label { border: none; margin: 0; padding: 0; }
+.btn-text-primary { background: transparent; border: none; color: #2563EB; font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit; }
 
-/* ===== EMPTY STATES ===== */
-.empty-state {
-  text-align: center;
-  padding: 60px 20px;
-  color: #64748b;
-}
-.empty-icon {
-  display: inline-flex;
-  width: 64px;
-  height: 64px;
-  border-radius: var(--radius-full);
-  background: #f1f5f9;
-  color: #94a3b8;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 16px;
-}
-.empty-state h3 {
-  font-size: 1.125rem;
-  font-weight: 700;
-  color: #0f172a;
-  margin: 0 0 8px;
-}
-.empty-state p { margin: 0 0 20px; font-size: 0.9rem; }
-.empty-state .btn { margin-top: 8px; }
+.empty-state { text-align: center; padding: 48px 20px; color: #6B7280; background: #F9FAFB; border-radius: 16px;}
+.empty-icon { font-size: 32px; color: #9CA3AF; margin-bottom: 16px; display: inline-block; }
+.empty-state h4 { margin: 0 0 8px; font-size: 16px; color: #111827; }
+.empty-state p { margin: 0; font-size: 14px; }
 
-/* ===== SUPPORT CHAT ===== */
-.chat-card {
-  display: flex;
-  flex-direction: column;
-  min-height: 400px;
-  max-height: 70vh;
-}
-.chat-messages {
-  flex: 1;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  margin-bottom: 20px;
-  padding-right: 4px;
-}
-.empty-chat {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  color: #94a3b8;
-  padding: 40px 20px;
-}
-.chat-icon {
-  display: inline-flex;
-  width: 56px;
-  height: 56px;
-  border-radius: var(--radius-full);
-  background: #f1f5f9;
-  color: #94a3b8;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 16px;
-}
-.empty-chat h3 { font-size: 1rem; font-weight: 700; color: #334155; margin: 0 0 6px; }
-.empty-chat p { margin: 0; font-size: 0.85rem; }
-.bubble {
-  max-width: 75%;
-  padding: 12px 16px;
-  border-radius: var(--radius-md);
-  font-size: 0.9rem;
-  line-height: 1.5;
-  animation: bubbleIn 0.2s var(--transition-base);
-}
-@keyframes bubbleIn { from { opacity: 0; transform: translateY(8px) scale(0.95); } to { opacity: 1; transform: translateY(0) scale(1); } }
-.bubble.user {
-  align-self: flex-end;
-  background: #0f172a;
-  color: #fff;
-  border-bottom-right-radius: 4px;
-  box-shadow: var(--shadow-sm);
-}
-.bubble.admin {
-  align-self: flex-start;
-  background: #f1f5f9;
-  color: #0f172a;
-  border-bottom-left-radius: 4px;
-}
-.bubble-meta {
-  font-size: 0.65rem;
-  font-weight: 700;
-  opacity: 0.7;
-  margin-bottom: 4px;
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
-}
-.bubble-text { word-wrap: break-word; }
-.bubble-time {
-  font-size: 0.65rem;
-  opacity: 0.5;
-  margin-top: 6px;
-  text-align: right;
-}
-.bubble.admin .bubble-time { text-align: left; }
-.chat-input {
-  display: flex;
-  gap: 10px;
-  padding-top: 16px;
-  border-top: 1px solid #f1f5f9;
-}
-.chat-input-field {
-  flex: 1;
-  padding: 14px 16px;
-  border: 1px solid #d1d5db;
-  border-radius: var(--radius-full);
-  font: inherit;
-  font-size: 0.95rem;
-  background: #fff;
-  color: #0f172a;
-  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
-}
-.chat-input-field:focus {
-  outline: none;
-  border-color: #0ea5e9;
-  box-shadow: var(--focus-ring);
-}
-.chat-send {
-  flex-shrink: 0;
-  width: 48px;
-  height: 48px;
-  border-radius: var(--radius-full);
-  padding: 0;
-}
-.chat-send:disabled { opacity: 0.4; }
+.addresses-grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
+.address-card { background: #F9FAFB; padding: 20px; border-radius: 16px; }
+.addr-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.addr-badge { background: #E5E7EB; color: #374151; font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 20px; text-transform: uppercase; letter-spacing: 0.5px;}
+.addr-actions { display: flex; gap: 8px; }
+.addr-name { font-size: 16px; font-weight: 600; color: #111827; margin: 0 0 6px; }
+.addr-detail { font-size: 14px; color: #4B5563; margin: 0 0 8px; line-height: 1.5; }
+.addr-phone { font-size: 13px; color: #6B7280; font-weight: 500; }
 
-/* ===== MODAL ===== */
-.modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(15, 23, 42, 0.5);
-  backdrop-filter: blur(4px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-  z-index: 1000;
-  animation: fadeIn 0.2s var(--transition-base);
-}
-.modal {
-  background: #fff;
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-xl);
-  width: 100%;
-  max-width: 480px;
-  max-height: 90vh;
-  overflow-y: auto;
-  animation: slideUp 0.25s var(--transition-base);
-}
-@keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-.modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 20px 24px;
-  border-bottom: 1px solid #f1f5f9;
-}
-.modal-header h3 { font-size: 1.125rem; font-weight: 700; margin: 0; }
+/* ─── SUPPORT CHAT ─── */
+.chat-viewport { display: flex; flex-direction: column; height: 60vh; max-height: 600px; background: #F9FAFB; border-radius: 20px; overflow: hidden; border: 1px solid #E5E7EB;}
+.chat-messages { flex: 1; overflow-y: auto; padding: 24px; display: flex; flex-direction: column; gap: 16px; }
+.chat-bubble { max-width: 80%; padding: 12px 16px; border-radius: 16px; font-size: 15px; line-height: 1.5; }
+.chat-bubble.user { align-self: flex-end; background: #111827; color: #ffffff; border-bottom-right-radius: 4px; }
+.chat-bubble.admin { align-self: flex-start; background: #ffffff; color: #111827; border: 1px solid #E5E7EB; border-bottom-left-radius: 4px; }
+.bubble-time { font-size: 11px; margin-top: 6px; opacity: 0.6; text-align: right; }
+
+.chat-input-area { display: flex; gap: 12px; padding: 16px; background: #ffffff; border-top: 1px solid #E5E7EB; }
+.clean-chat-input { flex: 1; padding: 14px 20px; background: #F3F4F6; border: none; border-radius: 40px; font-size: 15px; font-family: inherit; color: #111827; }
+.clean-chat-input:focus { outline: none; background: #E5E7EB; }
+.chat-send-btn { width: 48px; height: 48px; border-radius: 50%; background: #111827; color: #ffffff; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: 0.2s;}
+.chat-send-btn:disabled { background: #9CA3AF; cursor: not-allowed; }
+
+/* ─── BOTTOM SHEET MODAL (Addresses) ─── */
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+.modal-sheet { background: #ffffff; border-radius: 24px; width: 100%; max-width: 500px; max-height: 90vh; overflow-y: auto; padding: 0; }
+.modal-header { display: flex; justify-content: space-between; align-items: center; padding: 24px; border-bottom: 1px solid #F3F4F6; position: sticky; top: 0; background: #ffffff; z-index: 10;}
+.modal-header h3 { margin: 0; font-size: 18px; font-weight: 600; }
 .modal-form { padding: 24px; }
-.form-row { margin-bottom: 20px; }
-.form-row:last-of-type { margin-bottom: 24px; }
-.form-row.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-.modal-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-  padding-top: 8px;
-}
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 32px; }
+.form-grid .field { display: flex; flex-direction: column; gap: 8px; }
+.form-grid .full-width { grid-column: span 2; }
+.form-grid label { font-size: 13px; font-weight: 500; color: #6B7280; }
 
-/* ===== CARD DIVIDER ===== */
-.card-divider { margin: 24px 0; border-top: 1px solid #f1f5f9; }
+/* Transitions */
+.sheet-enter-active, .sheet-leave-active { transition: all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.sheet-enter-from, .sheet-leave-to { opacity: 0; }
+.sheet-enter-from .modal-sheet, .sheet-leave-to .modal-sheet { transform: translateY(40px) scale(0.98); }
 
-/* ===== TRANSITIONS ===== */
-.modal-enter-active, .modal-leave-active { transition: all 0.2s ease; }
-.modal-enter-from, .modal-leave-to { opacity: 0; }
-.modal-enter-from .modal, .modal-leave-to .modal { transform: translateY(20px) scale(0.98); }
-
-/* ===== RESPONSIVE ===== */
-/* ===== PROFILE HERO ===== */
-.profile-hero {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  padding: 32px 20px 24px;
-  margin: -28px -28px 8px;
-  background: linear-gradient(180deg, rgba(14, 165, 233, 0.08) 0%, transparent 100%);
-  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-  border-bottom: 1px solid #f1f5f9;
-}
-.profile-avatar-wrapper {
-  position: relative;
-  width: 104px;
-  height: 104px;
-  border-radius: 50%;
-  background: transparent;
-  margin-bottom: 16px;
-  cursor: pointer;
-  transition: transform var(--transition-fast);
-  overflow: hidden;
-}
-.profile-avatar-wrapper:hover { transform: scale(1.03); box-shadow: var(--shadow-xl), 0 0 0 4px #fff, 0 0 0 6px #e2e8f0; }
-.profile-avatar {
-  width: 100%;
-  height: 100%;
-  border-radius: 50%;
-  object-fit: cover;
-  display: block;
-}
-.profile-avatar-placeholder {
-  width: 100%;
-  height: 100%;
-  border-radius: var(--radius-full);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 2.25rem;
-  font-weight: 700;
-  color: #fff;
-}
-.profile-avatar-upload {
-  position: absolute;
-  bottom: 0;
-  right: 0;
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-full);
-  background: #0f172a;
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  border: 3px solid #fff;
-  box-shadow: var(--shadow-md);
-  transition: transform var(--transition-fast), background var(--transition-fast);
-  opacity: 0.9;
-}
-.profile-avatar-upload:hover { transform: scale(1.1); background: #1e293b; opacity: 1; }
-.profile-avatar-upload:focus-visible { outline: none; box-shadow: var(--focus-ring); }
-.profile-name {
-  font-size: 1.5rem;
-  font-weight: 800;
-  margin: 0 0 4px;
-  background: linear-gradient(135deg, #0f172a 0%, #334155 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-.profile-email {
-  font-size: 0.95rem;
-  color: #64748b;
-  margin: 0;
-  font-weight: 500;
-}
-
-/* ===== RESPONSIVE ===== */
+/* ─── RESPONSIVE MOBILE FIXES ─── */
 @media (max-width: 768px) {
-  .user-page { padding: 70px 12px 32px; }
-  .dashboard-header { padding: 20px; }
-  .title-group { min-width: 0; }
-  .page-title { font-size: 1.5rem; }
-  .avatar-wrapper { width: 60px; height: 60px; }
-  .user-meta { padding-top: 16px; }
-  .view { padding: 20px; }
+  .user-page { padding: 76px 16px 80px; }
+  .page-title { font-size: 24px; }
+  .clean-tabs-bar { gap: 24px; }
+  
   .addresses-grid { grid-template-columns: 1fr; }
-  .bubble { max-width: 90%; }
-  .form-row.two-col { grid-template-columns: 1fr; }
-  .segmented-tabs { justify-content: center; }
-  .profile-hero { margin: -20px -20px 8px; padding: 24px 16px 16px; }
-  .profile-avatar-wrapper { width: 88px; height: 88px; box-shadow: var(--shadow-md), 0 0 0 3px #fff, 0 0 0 5px #f1f5f9; }
-  .profile-avatar-placeholder { font-size: 1.75rem; }
-  .profile-name { font-size: 1.25rem; }
+  .form-grid { grid-template-columns: 1fr; gap: 16px;}
+  .form-grid .full-width { grid-column: span 1; }
+
+  /* Bottom sheet strict adherence */
+  .modal-overlay { align-items: flex-end; padding: 0; }
+  .modal-sheet { border-radius: 24px 24px 0 0; max-height: 85vh; margin: 0; max-width: 100%; }
 }
-
-@media (max-width: 480px) {
-  .page-title { font-size: 1.25rem; }
-  .page-subtitle { font-size: 0.8rem; }
-  .btn { padding: 10px 14px; font-size: 0.8125rem; }
-  .modal { margin: 10px; max-height: calc(100vh - 20px); }
-}
-
-/* ===== SCROLLBAR ===== */
-.chat-messages::-webkit-scrollbar { width: 6px; }
-.chat-messages::-webkit-scrollbar-track { background: transparent; }
-.chat-messages::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
-.chat-messages::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-
-/* ===== FOCUS VISIBLE POLYFILL ===== */
-:focus:not(:focus-visible) { outline: none; }
-:focus-visible { outline: none; }
 </style>
