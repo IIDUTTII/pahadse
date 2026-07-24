@@ -1042,7 +1042,7 @@ export const createOrderSecure = async (orderPayload) => {
   if (!user) throw new Error('NOT_LOGGED_IN');
   
   try {
-    const idToken = await user.getIdToken();
+    const idToken = await user.getIdToken(true);
     
     const response = await fetch('/api/create-order', {
       method: 'POST',

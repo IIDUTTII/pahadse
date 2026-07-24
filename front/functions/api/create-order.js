@@ -68,8 +68,12 @@ export async function onRequest(context) {
       orderId: orderId, // store orderId as a field for query fallback
     };
 
+    const firebaseProjectId = env.FIREBASE_PROJECT_ID || 'pahadse-13309';
+    const razorpayKeyId = env.RAZORPAY_KEY_ID || 'rzp_test_T54mB31WZLQDv4';
+    const razorpayKeySecret = env.RAZORPAY_KEY_SECRET || 'wBOsE6IhL3Fkr5Jt3Jr1xHi8';
+
     // ─── 1. CREATE ORDER DOCUMENT WITH SPECIFIC ID ───
-    const createUrl = `https://firestore.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents/orders?documentId=${orderId}`;
+    const createUrl = `https://firestore.googleapis.com/v1/projects/${firebaseProjectId}/databases/(default)/documents/orders?documentId=${orderId}`;
     console.log('📤 Creating order at URL:', createUrl);
     console.log('📤 Order data:', JSON.stringify(orderData, null, 2));
 
@@ -94,7 +98,7 @@ export async function onRequest(context) {
 
     // ─── 2. CLEAR CART (only for COD) ───
     if (paymentMethod === 'cod') {
-      const cartUrl = `https://firestore.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents/carts/${userId}`;
+      const cartUrl = `https://firestore.googleapis.com/v1/projects/${firebaseProjectId}/databases/(default)/documents/carts/${userId}`;
       const cartRes = await fetch(cartUrl, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${idToken}` },
@@ -110,7 +114,7 @@ export async function onRequest(context) {
     // ─── 3. CREATE RAZORPAY ORDER (only for online) ───
     let razorpayOrder = null;
     if (paymentMethod === 'online') {
-      const rzpAuth = 'Basic ' + btoa(`${env.RAZORPAY_KEY_ID}:${env.RAZORPAY_KEY_SECRET}`);
+      const rzpAuth = 'Basic ' + btoa(`${razorpayKeyId}:${razorpayKeySecret}`);
       const rzpBody = {
         amount: Math.round(calc.total * 100),
         currency: 'INR',
@@ -126,13 +130,12 @@ export async function onRequest(context) {
       razorpayOrder = await rzpRes.json();
       if (razorpayOrder.error) {
         console.error('❌ Razorpay order creation failed:', razorpayOrder.error);
-        // We already have the order in Firestore, but we should not throw; return error to client but keep the order in pending state.
         return errorResponse(`Razorpay error: ${razorpayOrder.error.description}`, 400);
       }
       console.log('✅ Razorpay order created:', razorpayOrder.id);
 
       // Store razorpay_order_id in order document (update)
-      const updateUrl = `https://firestore.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents/orders/${orderId}`;
+      const updateUrl = `https://firestore.googleapis.com/v1/projects/${firebaseProjectId}/databases/(default)/documents/orders/${orderId}`;
       const updateRes = await fetch(updateUrl, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${idToken}` },
@@ -155,7 +158,7 @@ export async function onRequest(context) {
       success: true,
       orderId,
       razorpayOrder,
-      razorpayKey: env.RAZORPAY_KEY_ID,
+      razorpayKey: razorpayKeyId,
     }), {
       status: 200,
       headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
@@ -201,13 +204,18 @@ function errorResponse(msg, status) {
 }
 
 async function verifyFirebaseToken(idToken, env) {
-  const url = `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${env.FIREBASE_API_KEY}`;
+  const apiKey = env?.FIREBASE_API_KEY || 'AIzaSyABec4VYQBnHpyzP1IX4TmW8muY3_VQHDM';
+  const url = `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${apiKey}`;
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ idToken })
   });
-  if (!res.ok) return null;
+  if (!res.ok) {
+    const errorText = await res.text();
+    console.error('❌ verifyFirebaseToken failed:', res.status, errorText);
+    return null;
+  }
   const data = await res.json();
   return data.users?.[0] || null;
 }

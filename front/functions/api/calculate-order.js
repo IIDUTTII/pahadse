@@ -55,13 +55,18 @@ function errorResponse(msg, status) {
 }
 
 async function verifyFirebaseToken(idToken, env) {
-  const url = `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${env.FIREBASE_API_KEY}`;
+  const apiKey = env?.FIREBASE_API_KEY || 'AIzaSyABec4VYQBnHpyzP1IX4TmW8muY3_VQHDM';
+  const url = `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${apiKey}`;
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ idToken })
   });
-  if (!res.ok) return null;
+  if (!res.ok) {
+    const errorText = await res.text();
+    console.error('❌ verifyFirebaseToken failed:', res.status, errorText);
+    return null;
+  }
   const data = await res.json();
   return data.users?.[0] || null;
 }

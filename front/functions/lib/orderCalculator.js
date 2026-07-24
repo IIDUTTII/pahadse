@@ -19,8 +19,9 @@ export async function calculateOrder(items, userId, idToken, env, couponCode = n
       throw new Error('Each item must have a productId and quantity >= 1');
     }
 
+    const projectId = env?.FIREBASE_PROJECT_ID || 'pahadse-13309';
     // Fetch product from Firestore REST API
-    const url = `https://firestore.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents/products/${item.productId}`;
+    const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/products/${item.productId}`;
     const res = await fetch(url, {
       headers: { 'Authorization': `Bearer ${idToken}` }
     });
@@ -118,7 +119,8 @@ export async function calculateOrder(items, userId, idToken, env, couponCode = n
   // 3. Fetch shipping config from Firestore
   let shippingCost = 0;
   try {
-    const shipUrl = `https://firestore.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents/systemConfig/shipping`;
+    const projectId = env?.FIREBASE_PROJECT_ID || 'pahadse-13309';
+    const shipUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/systemConfig/shipping`;
     const shipRes = await fetch(shipUrl, { headers: { 'Authorization': `Bearer ${idToken}` } });
     if (shipRes.ok) {
       const shipDoc = await shipRes.json();
