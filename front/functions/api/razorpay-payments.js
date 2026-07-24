@@ -86,8 +86,8 @@ async function verifyFirebaseToken(idToken, env) {
 
 async function getUserRole(uid, env) {
   try {
-    const token = await getServiceAccountToken(env);
-    const url = `https://firestore.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents/users/${uid}`;
+    const firebaseProjectId = env?.FIREBASE_PROJECT_ID || 'pahadse-13309';
+    const url = `https://firestore.googleapis.com/v1/projects/${firebaseProjectId}/databases/(default)/documents/users/${uid}`;
     const res = await fetch(url, {
       headers: { 'Authorization': `Bearer ${token}` },
     });
