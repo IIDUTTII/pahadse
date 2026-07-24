@@ -29,9 +29,8 @@ const routes = [
   { path: '/user',                   component: User,name: "User",meta: { title: 'User | PahadS' }          },
   { path: '/privacy',               component: Privacy,name: "Privacy",meta: { title: 'Privacy | PahadS' }       },
   { path: '/cart',                   component: Cart,name: "Cart",meta: { title: 'Cart | PahadS' }          },
-  { path: '/product/:id',            component: ProductDetail,name: "ProductDetail",meta: { title: 'Product | PahadS' } },  // 👈 new
+  { path: '/product/:id',            component: ProductDetail,name: "ProductDetail",meta: { title: 'Product | PahadS' } },
   { path: '/admin', component: Admin, meta: { title: 'Admin | PahadS', requiresAdmin: true } },
-  { path: '/:pathMatch(.*)*', name: 'NotFound', component: NotFoundView },
   { path: '/admin/product/:id', component: ProductForm, meta: { title: 'Edit Product | PahadS', requiresAdmin: true } },
   { path: '/checkout', component: checkout,meta: { title: 'Checkout | PahadS' } },
   { path: '/terms', component: Terms,meta: { title: 'Terms | PahadS' } },
@@ -39,7 +38,7 @@ const routes = [
   { path: '/contact', component: Contact,meta: { title: 'Contact | PahadS' } },
   { path: '/about', component: About,meta: { title: 'About | PahadS' } },
   { path: '/orders', component: orders,meta: { title: 'Orders | PahadS' } },
-  //{ path: '/layout', component: Layout,name: "Layout",meta: { title: 'Layout | PahadS' } }
+  { path: '/:pathMatch(.*)*', name: 'NotFound', component: NotFoundView },
 ]
 
 const router = createRouter({

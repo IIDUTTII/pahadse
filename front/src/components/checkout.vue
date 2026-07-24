@@ -125,8 +125,7 @@ const openRazorpayModal = async (orderPayload) => {
         try {
           processingOrder.value = true;
 
-          // Get the user's ID token
-const idToken = await auth.currentUser.getIdToken();
+          const idToken = await auth.currentUser.getIdToken(true);
 
           const verifyRes = await fetch('/api/verify-payment', {
             method: 'POST',
